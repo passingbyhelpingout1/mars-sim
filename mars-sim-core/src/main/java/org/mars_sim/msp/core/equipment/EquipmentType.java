@@ -1,13 +1,10 @@
-/**
+/*
  * Mars Simulation Project
  * EquipmentType.java
- * @version 3.2.0 2021-06-20
+ * @date 2021-10-08
  * @author Manny Kung
  */
 package org.mars_sim.msp.core.equipment;
-
-import java.util.HashSet;
-import java.util.Set;
 
 import org.mars_sim.msp.core.Msg;
 import org.mars_sim.msp.core.resource.ResourceUtil;
@@ -17,21 +14,22 @@ import org.mars_sim.msp.core.resource.ResourceUtil;
  * The EquipmentType enum class is used for distinguishing between various type of equipments
  */
 public enum EquipmentType {
-	// Equipment - EVA gear
+	
+	// non-container
 	EVA_SUIT			(Msg.getString("EquipmentType.EVASuit")), //$NON-NLS-1$ 
+	ROBOT				("Robot"), 
+	
 	// Container 
 	BAG 				(Msg.getString("EquipmentType.bag")), //$NON-NLS-1$
 	BARREL 				(Msg.getString("EquipmentType.barrel")), //$NON-NLS-1$
 	GAS_CANISTER		(Msg.getString("EquipmentType.gasCanister")), //$NON-NLS-1$
 	LARGE_BAG			(Msg.getString("EquipmentType.largeBag")), //$NON-NLS-1$
 	SPECIMEN_BOX		(Msg.getString("EquipmentType.specimenBox")); //$NON-NLS-1$
-
+	
 	private String name;	
 
-	private static Set<String> nameSet;
-	
-	private static Set<Integer> idSet;
-	
+	private static final int FIRST_EQUIPMENT_RESOURCE_ID = ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID;
+		
 	/** hidden constructor. */
 	private EquipmentType(String name) {
 		this.name = name;
@@ -47,36 +45,6 @@ public enum EquipmentType {
 	}
 
 	/**
-	 * Gets a set of equipment names
-	 * 
-	 * @return
-	 */
-	public static Set<String> getNameSet() {
-		if (nameSet == null) {
-			nameSet = new HashSet<String>();
-			for (EquipmentType et : EquipmentType.values()) {
-				nameSet.add(et.toString());
-			}
-		}
-		return nameSet;
-	}
-
-	/**
-	 * Gets a set of equipment ids
-	 * 
-	 * @return
-	 */
-	public static Set<Integer> getIDs() {
-		if (idSet == null) {
-			idSet = new HashSet<Integer>();
-			for (EquipmentType e : EquipmentType.values()) {
-				idSet.add(e.ordinal() + ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID);
-			}
-		}
-		return idSet;
-	}
-	
-	/**
 	 * Obtains the type id (not the ordinal id) of the equipment
 	 * 
 	 * @param name
@@ -86,7 +54,7 @@ public enum EquipmentType {
 		if (name != null) {
 	    	for (EquipmentType e : EquipmentType.values()) {
 	    		if (name.equalsIgnoreCase(e.name)) {
-	    			return e.ordinal() + ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID;
+	    			return e.ordinal() + FIRST_EQUIPMENT_RESOURCE_ID;
 	    		}
 	    	}
 		}
@@ -100,41 +68,9 @@ public enum EquipmentType {
 	 * @return {@link EquipmentType}
 	 */
 	public static EquipmentType convertID2Type(int typeID) {
-		return EquipmentType.values()[typeID - ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID];
+		return EquipmentType.values()[typeID - FIRST_EQUIPMENT_RESOURCE_ID];
 	}
-	
-	/**
-	 * Obtains the type id of the equipment class
-	 * 
-	 * @param equipmentClass
-	 * @return type id
-	 */
-	public static int convertClass2ID(Class<?> equipmentClass) {
-		if (Bag.class.equals(equipmentClass)) return BAG.ordinal() + ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID;
-		else if (Barrel.class.equals(equipmentClass)) return BARREL.ordinal() + ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID;
-		else if (EVASuit.class.equals(equipmentClass)) return EVA_SUIT.ordinal() + ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID;
-		else if (GasCanister.class.equals(equipmentClass)) return GAS_CANISTER.ordinal() + ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID;
-        else if (LargeBag.class.equals(equipmentClass)) return LARGE_BAG.ordinal() + ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID;
-		else if (SpecimenBox.class.equals(equipmentClass)) return SPECIMEN_BOX.ordinal() + ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID;
-		else return -1;
-	}
-	
-	/**
-	 * Obtains the enum type of the equipment class
-	 * 
-	 * @param equipmentClass
-	 * @return {@link EquipmentType}
-	 */
-	public static EquipmentType convertClass2Type(Class<?> equipmentClass) {
-		if (Bag.class.equals(equipmentClass)) return BAG;
-		else if (Barrel.class.equals(equipmentClass)) return BARREL;
-		else if (EVASuit.class.equals(equipmentClass)) return EVA_SUIT;
-		else if (GasCanister.class.equals(equipmentClass)) return GAS_CANISTER;
-        else if (LargeBag.class.equals(equipmentClass)) return LARGE_BAG;
-		else if (SpecimenBox.class.equals(equipmentClass)) return SPECIMEN_BOX;
-		else return null;
-	}
-	
+
 	/**
 	 * Obtains the enum type of the equipment with its name
 	 * 
@@ -149,7 +85,7 @@ public enum EquipmentType {
 	    		}
 	    	}
 		}
-		return null;
+		throw new IllegalArgumentException("No equipment type called " + name);
 	}
 	
 	/**
@@ -159,6 +95,6 @@ public enum EquipmentType {
 	 * @return
 	 */
 	public static int getResourceID(EquipmentType type) {
-		return type.ordinal() + ResourceUtil.FIRST_EQUIPMENT_RESOURCE_ID;
+		return type.ordinal() + FIRST_EQUIPMENT_RESOURCE_ID;
 	}
 }

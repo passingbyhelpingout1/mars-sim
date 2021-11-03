@@ -1,7 +1,7 @@
 /*
  * Mars Simulation Project
  * Mining.java
- * @date 2021-09-04
+ * @date 2021-10-20
  * @author Scott Davis
  */
 
@@ -15,15 +15,12 @@ import java.util.Set;
 import java.util.logging.Level;
 
 import org.mars_sim.msp.core.Coordinates;
-import org.mars_sim.msp.core.Inventory;
 import org.mars_sim.msp.core.Msg;
 import org.mars_sim.msp.core.Simulation;
 import org.mars_sim.msp.core.environment.ExploredLocation;
 import org.mars_sim.msp.core.equipment.EquipmentType;
-import org.mars_sim.msp.core.equipment.LargeBag;
 import org.mars_sim.msp.core.logging.SimLogger;
 import org.mars_sim.msp.core.person.Person;
-import org.mars_sim.msp.core.person.PhysicalCondition;
 import org.mars_sim.msp.core.person.ai.job.JobType;
 import org.mars_sim.msp.core.person.ai.task.CollectMinedMinerals;
 import org.mars_sim.msp.core.person.ai.task.EVAOperation;
@@ -58,9 +55,6 @@ public class Mining extends RoverMission
 	
 	/** Default description. */
 	private static final String DEFAULT_DESCRIPTION = Msg.getString("Mission.description.mining"); //$NON-NLS-1$
-
-	/** Mission Type enum. */
-	public static final MissionType missionType = MissionType.MINING;
 	
 	/** Mission phases */
 	public static final MissionPhase MINING_SITE = new MissionPhase(Msg.getString("Mission.phase.miningSite")); //$NON-NLS-1$
@@ -81,14 +75,10 @@ public class Mining extends RoverMission
 	 * The minimum number of mineral concentration estimation improvements for an
 	 * exploration site for it to be considered mature enough to mine.
 	 */
-	private static final int MATURE_ESTIMATE_NUM = 10;
+	public static final int MATURE_ESTIMATE_NUM = 10;
 
 	// Data members
 	private boolean endMiningSite;
-//	/** Base amount (kg) of a type of mineral at a site. */
-//	private double mineralAmount = 1000;
-//	/** Amount of time(millisols) to spend at the mining site. */
-//	private double siteTime = 2000D;
 	
 	private ExploredLocation miningSite;
 	private MarsClock miningSiteStartTime;
@@ -98,10 +88,6 @@ public class Mining extends RoverMission
 	
 	private Map<AmountResource, Double> excavatedMinerals;
 	private Map<AmountResource, Double> totalExcavatedMinerals;
-	
-	private static final int oxygenID = ResourceUtil.oxygenID;
-	private static final int waterID = ResourceUtil.waterID;
-	private static final int foodID = ResourceUtil.foodID;
 
 	/**
 	 * Constructor
@@ -193,7 +179,7 @@ public class Mining extends RoverMission
 			Rover rover, LightUtilityVehicle luv, String description) {
 
 		// Use RoverMission constructor.
-		super(description, missionType, (MissionMember) members.toArray()[0], RoverMission.MIN_GOING_MEMBERS, rover);
+		super(description, MissionType.MINING, (MissionMember) members.toArray()[0], RoverMission.MIN_GOING_MEMBERS, rover);
 
 		this.startingPerson = this.getStartingPerson();
 		
@@ -298,13 +284,11 @@ public class Mining extends RoverMission
 	public static boolean areAvailableAttachmentParts(Settlement settlement) {
 		boolean result = true;
 
-		Inventory inv = settlement.getInventory();
-
 		try {
-			if (!inv.hasItemResource(ItemResourceUtil.pneumaticDrillID)) {
+			if (!settlement.getItemResourceIDs().contains(ItemResourceUtil.pneumaticDrillID)) {
 				result = false;
 			}
-			if (!inv.hasItemResource(ItemResourceUtil.backhoeID)) {
+			if (!settlement.getItemResourceIDs().contains(ItemResourceUtil.backhoeID)) {
 				result = false;
 			}
 		} catch (Exception e) {
@@ -396,14 +380,14 @@ public class Mining extends RoverMission
 		// Attach light utility vehicle for towing.
 		if (!isDone() && (getRover().getTowedVehicle() == null)) {
 
-			Inventory settlementInv = getStartingSettlement().getInventory();
-			Inventory luvInv = luv.getInventory();
+			Settlement settlement = getStartingSettlement();
+
 			getRover().setTowedVehicle(luv);
 			luv.setTowingVehicle(getRover());
-			settlementInv.retrieveUnit(luv);
+			settlement.removeParkedVehicle(luv);
 
-			if (!settlementInv.hasItemResource(ItemResourceUtil.pneumaticDrillID)
-					|| !settlementInv.hasItemResource(ItemResourceUtil.backhoeID)) {
+			if (!settlement.hasItemResource(ItemResourceUtil.pneumaticDrillID)
+					|| !settlement.hasItemResource(ItemResourceUtil.backhoeID)) {
 				logger.warning(startingPerson.getSettlement(), startingPerson, 
 						" could not load LUV and/or its attachment parts from " + getRover().getNickName());
 				addMissionStatus(MissionStatus.LUV_ATTACHMENT_PARTS_NOT_LOADABLE);
@@ -413,11 +397,11 @@ public class Mining extends RoverMission
 				
 			try {
 				// Load light utility vehicle with attachment parts.
-				settlementInv.retrieveItemResources(ItemResourceUtil.pneumaticDrillID, 1);
-				luvInv.storeItemResources(ItemResourceUtil.pneumaticDrillID, 1);
+				settlement.retrieveItemResource(ItemResourceUtil.pneumaticDrillID, 1);
+				luv.storeItemResource(ItemResourceUtil.pneumaticDrillID, 1);
 
-				settlementInv.retrieveItemResources(ItemResourceUtil.backhoeID, 1);
-				luvInv.storeItemResources(ItemResourceUtil.backhoeID, 1);
+				settlement.retrieveItemResource(ItemResourceUtil.backhoeID, 1);
+				luv.storeItemResource(ItemResourceUtil.backhoeID, 1);
 			} catch (Exception e) {
 //				logger.log(Level.SEVERE, "Light Utility Vehicle and/or its attachment parts could not be loaded.");
 				logger.severe(startingPerson.getSettlement(), startingPerson, 
@@ -444,19 +428,19 @@ public class Mining extends RoverMission
 		// Unload towed light utility vehicle.
 		if (!isDone() && (getRover().getTowedVehicle() != null)) {
 			try {
-				Inventory settlementInv = getStartingSettlement().getInventory();
-				Inventory luvInv = luv.getInventory();
+				Settlement settlement = getStartingSettlement();
+				
 				getRover().setTowedVehicle(null);
 				luv.setTowingVehicle(null);
-				settlementInv.storeUnit(luv);
+				settlement.removeParkedVehicle(luv);
 				luv.findNewParkingLoc();
 
 				// Unload attachment parts.
-				luvInv.retrieveItemResources(ItemResourceUtil.pneumaticDrillID, 1);
-				settlementInv.storeItemResources(ItemResourceUtil.pneumaticDrillID, 1);
+				luv.retrieveItemResource(ItemResourceUtil.pneumaticDrillID, 1);
+				settlement.storeItemResource(ItemResourceUtil.pneumaticDrillID, 1);
 
-				luvInv.retrieveItemResources(ItemResourceUtil.backhoeID, 1);
-				settlementInv.storeItemResources(ItemResourceUtil.backhoeID, 1);
+				luv.retrieveItemResource(ItemResourceUtil.backhoeID, 1);
+				settlement.storeItemResource(ItemResourceUtil.backhoeID, 1);
 			} catch (Exception e) {
 				logger.log(Level.SEVERE, "Error unloading light utility vehicle and attachment parts.");
 				addMissionStatus(MissionStatus.LUV_ATTACHMENT_PARTS_NOT_LOADABLE);
@@ -836,7 +820,7 @@ public class Mining extends RoverMission
 		double bestValue = 0D;
 
 		try {
-			double roverRange = rover.getRange(missionType);
+			double roverRange = rover.getRange(MissionType.MINING);
 			double tripTimeLimit = getTotalTripTimeLimit(rover, rover.getCrewCapacity(), true);
 			double tripRange = getTripTimeRange(tripTimeLimit, rover.getBaseSpeed() / 2D);
 			double range = roverRange;
@@ -903,66 +887,6 @@ public class Mining extends RoverMission
 		return result;
 	}
 
-	/**
-	 * Gets the time limit of the trip based on life support capacity.
-	 * 
-	 * @param useBuffer use time buffer in estimation if true.
-	 * @return time (millisols) limit.
-	 * @throws MissionException if error determining time limit.
-	 */
-	private static double getTotalTripTimeLimit(Rover rover, int memberNum, boolean useBuffer) {
-
-		Inventory vInv = rover.getInventory();
-
-		double timeLimit = Double.MAX_VALUE;
-
-		// Check food capacity as time limit.
-		// AmountResource food =
-		// ResourceUtil.findAmountResource(LifeSupportType.FOOD);
-		double foodConsumptionRate = personConfig.getFoodConsumptionRate();// * Mission.FOOD_MARGIN;
-		double foodCapacity = vInv.getAmountResourceCapacity(foodID, false);
-		double foodTimeLimit = foodCapacity / (foodConsumptionRate * memberNum);
-		if (foodTimeLimit < timeLimit) {
-			timeLimit = foodTimeLimit;
-		}
-
-		// Check dessert1 capacity as time limit.
-//        AmountResource dessert1 = ResourceUtil.findAmountResource("Soymilk");
-//        double dessert1ConsumptionRate = personConfig.getFoodConsumptionRate() / 6D;
-//        double dessert1Capacity = vInv.getAmountResourceCapacity(dessert1, false);
-//        double dessert1TimeLimit = dessert1Capacity / (dessert1ConsumptionRate * memberNum);
-//        if (dessert1TimeLimit < timeLimit)
-//            timeLimit = dessert1TimeLimit;
-
-		// Check water capacity as time limit.
-		// AmountResource water =
-		// ResourceUtil.findAmountResource(LifeSupportType.WATER);
-		double waterConsumptionRate = personConfig.getWaterConsumptionRate();// * Mission.WATER_MARGIN;
-		double waterCapacity = vInv.getAmountResourceCapacity(waterID, false);
-		double waterTimeLimit = waterCapacity / (waterConsumptionRate * memberNum);
-		if (waterTimeLimit < timeLimit) {
-			timeLimit = waterTimeLimit;
-		}
-
-		// Check oxygen capacity as time limit.
-		// AmountResource oxygen =
-		// ResourceUtil.findAmountResource(LifeSupportType.OXYGEN);
-		double oxygenConsumptionRate = personConfig.getHighO2ConsumptionRate();// * Mission.OXYGEN_MARGIN;
-		double oxygenCapacity = vInv.getAmountResourceCapacity(oxygenID, false);
-		double oxygenTimeLimit = oxygenCapacity / (oxygenConsumptionRate * memberNum);
-		if (oxygenTimeLimit < timeLimit) {
-			timeLimit = oxygenTimeLimit;
-		}
-
-		// Convert timeLimit into millisols and use error margin.
-		timeLimit = (timeLimit * 1000D);
-		if (useBuffer) {
-			timeLimit /= Vehicle.getLifeSupportRangeErrorMargin();
-		}
-
-		return timeLimit;
-	}
-
 	@Override
 	public Map<Integer, Integer> getEquipmentNeededForRemainingMission(boolean useBuffer) {
 		if (equipmentNeededCache != null) {
@@ -971,7 +895,7 @@ public class Mining extends RoverMission
 			Map<Integer, Integer> result = new HashMap<>();
 
 			// Include required number of bags.
-			result.put(EquipmentType.convertName2ID(LargeBag.TYPE), NUMBER_OF_LARGE_BAGS);
+			result.put(EquipmentType.getResourceID(EquipmentType.LARGE_BAG), NUMBER_OF_LARGE_BAGS);
 
 			equipmentNeededCache = result;
 			return result;
@@ -1025,33 +949,8 @@ public class Mining extends RoverMission
 
 		int crewNum = getPeopleNumber();
 
-		// Determine life support supplies needed for trip.
-		double oxygenAmount = PhysicalCondition.getOxygenConsumptionRate() * timeSols * crewNum;
-		if (result.containsKey(oxygenID)) {
-			oxygenAmount += (Double) result.get(oxygenID);
-		}
-		result.put(oxygenID, oxygenAmount);
-
-		double waterAmount = PhysicalCondition.getWaterConsumptionRate() * timeSols * crewNum;
-		if (result.containsKey(waterID)) {
-			waterAmount += (Double) result.get(waterID);
-		}
-		result.put(waterID, waterAmount);
-
-		double foodAmount = PhysicalCondition.getFoodConsumptionRate() * timeSols * crewNum;
-		if (result.containsKey(foodID)) {
-			foodAmount += (Double) result.get(foodID);
-		}
-		result.put(foodID, foodAmount);
-
-		// Add Soymilk AmountResource dessert1 =
-//		ResourceUtil.findAmountResource("Soymilk"); 
-//		double dessert1Amount = PhysicalCondition.getFoodConsumptionRate() / 6D timeSols * crewNum; 
-//		if (result.containsKey(dessert1)) 
-//			dessert1Amount += (Double)
-//		result.get(dessert1); 
-//		result.put(dessert1, dessert1Amount);
-		
+		// Determine life support supplies needed for mining activity.
+		addLifeSupportResources(result, crewNum, timeSols, useBuffer);
 		return result;
 	}
 

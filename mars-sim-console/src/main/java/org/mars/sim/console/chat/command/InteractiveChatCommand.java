@@ -192,10 +192,12 @@ public class InteractiveChatCommand extends ChatCommand {
 	}
 
 	/**
-	 * Get the prompt for interactive Chat Commands
-	 * @return
+	 * Get the prompt for interactive Chat Commands.
+	 * The default implementation returns a static text
+	 * @param context Conversation in progress; may be needed in overriding methods
+	 * @return Prompt to be displayed
 	 */
-	public String getPrompt() {
+	public String getPrompt(Conversation context) {
 		return prompt;
 	}
 

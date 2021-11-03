@@ -16,12 +16,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 
-import org.mars_sim.msp.core.Inventory;
 import org.mars_sim.msp.core.LifeSupportInterface;
 import org.mars_sim.msp.core.Msg;
 import org.mars_sim.msp.core.Simulation;
 import org.mars_sim.msp.core.SimulationConfig;
-import org.mars_sim.msp.core.Unit;
 import org.mars_sim.msp.core.UnitEventType;
 import org.mars_sim.msp.core.logging.SimLogger;
 import org.mars_sim.msp.core.person.ai.NaturalAttributeManager;
@@ -69,6 +67,8 @@ public class PhysicalCondition implements Serializable {
 	private static final int MIN_VALUE = 0;
 	/** Life support maximum value. */
 	private static final int MAX_VALUE = 1;
+	
+	public static final int OXYGEN_ID = ResourceUtil.oxygenID; 
 	
 	/** The amount of fatigue for the mental breakdown to occur [millisols]. */
 	public static final double MENTAL_BREAKDOWN = 100D;
@@ -350,8 +350,10 @@ public class PhysicalCondition implements Serializable {
 		double preference = person.getPreference().getPreferenceScore(eatMealMeta) * 10D;
 
 		// Update the personal max energy and appetite based on one's age and weight
-		personalMaxEnergy = personalMaxEnergy + d1 + d2 + preference;
+		personalMaxEnergy = personalMaxEnergy + 50 * (d1 + d2 + preference);
 		appetite = personalMaxEnergy / MAX_DAILY_ENERGY_INTAKE;
+//		System.out.println(person + "  d1: " + d1 + "  d2: " + d2 + "  pref: " + preference
+//				+ "  personalMaxEnergy: " + personalMaxEnergy + "  appetite: " + appetite);
 	}
 
 	public void recoverFromSoreness(double value) {
@@ -623,22 +625,22 @@ public class PhysicalCondition implements Serializable {
 		// kJoules) / ENERGY_FACTOR;
 
 		if (kJoules > 10_000D) {
-			kJoules += xdelta * .65;
+			kJoules += xdelta * .1;
 		} else if (kJoules > 9_000D) {
-			kJoules += xdelta * .6;
+			kJoules += xdelta * .15;
 		} else if (kJoules > 8_000D) {
-			kJoules += xdelta * .75;
+			kJoules += xdelta * .2;
 		} else if (kJoules > 7_000D) {
-			kJoules += xdelta * .8;
+			kJoules += xdelta * .25;
 		} else if (kJoules > 6_000D) {
-			kJoules += xdelta * .85;
+			kJoules += xdelta * .3;
 		} else
-			kJoules += xdelta * .9;
+			kJoules += xdelta * .35;
 
 		circadian.eatFood(kJoules / 50D);
 
-		if (kJoules > personalMaxEnergy * 2) {
-			kJoules = personalMaxEnergy * 2;
+		if (kJoules > personalMaxEnergy * 1.5) {
+			kJoules = personalMaxEnergy * 1.5;
 		}
 
 	}
@@ -777,6 +779,11 @@ public class PhysicalCondition implements Serializable {
 		}
 	}
 	
+	/**
+	 * Gets the starvation health problem instance
+	 * 
+	 * @return
+	 */
 	private HealthProblem getStarvationProblem() {
 		for (HealthProblem p: problems) {
 			if (p.getType() == starvation.getType()) {
@@ -1156,52 +1163,6 @@ public class PhysicalCondition implements Serializable {
 		}
 	}
 
-	/**
-	 * Robot consumes given amount of power
-	 * 
-	 * @param amount    amount of power to consume (in kJ).
-	 * @param container unit to get power from
-	 * @throws Exception if error consuming power.
-	 */
-	public void consumePower(double amount, Unit container) {
-		if (container == null)
-			throw new IllegalArgumentException("container is null");
-	}
-
-	/**
-	 * Person consumes given amount of packed food
-	 * 
-	 * @param amount    amount of food to consume (in kg).
-	 * @param container unit to get food from
-	 * @throws Exception if error consuming food.
-	 */
-	public void consumePackedFood(double amount, Unit container) {
-		Inventory inv = container.getInventory();
-
-		double foodEaten = amount;
-		double foodAvailable = inv.getAmountResourceStored(ResourceUtil.foodID, false);
-
-		inv.addAmountDemandTotalRequest(ResourceUtil.foodID, foodEaten);
-
-		if (foodAvailable < 0.01D) {
-
-			logger.log(person, Level.WARNING, 10_000, "Found only " + foodAvailable
-							+ " kg preserved food remaining.");
-			}
-
-		// if container has less than enough food, finish up all food in the container
-		else {
-
-			if (foodEaten > foodAvailable)
-				foodEaten = foodAvailable;
-
-			foodEaten = Math.round(foodEaten * 1_000_000.0) / 1_000_000.0;
-			// subtract food from container
-			inv.retrieveAmountResource(ResourceUtil.foodID, foodEaten);
-
-			inv.addAmountDemand(ResourceUtil.foodID, foodEaten);
-		}
-	}
 
 	/**
 	 * Person consumes given amount of oxygen
@@ -1219,9 +1180,8 @@ public class PhysicalCondition implements Serializable {
 			}
 			else {
 				double amountRecieved = support.provideOxygen(amount);
-	
 				// Track the amount consumed
-				person.addConsumptionTime(ResourceUtil.oxygenID, amountRecieved);
+				person.addConsumptionTime(OXYGEN_ID, amountRecieved);
 				// Note: how to model how much oxygen we need properly ?			
 				double required = amount / 2D; 
 	
@@ -1362,8 +1322,7 @@ public class PhysicalCondition implements Serializable {
 		deathDetails = new DeathInfo(person, problem, reason, lastWord);
 		// Declare the person dead
 		person.setDeclaredDead();
-		// Set unit description to "Dead"
-		person.setDescription("Dead");
+
 		// Deregister the person's quarters
 		person.deregisterBed();
 		// Set work shift to OFF

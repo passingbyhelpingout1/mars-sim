@@ -1,7 +1,7 @@
 /*
  * Mars Simulation Project
  * Walk.java
- * @date 2021-08-28
+ * @date 2021-10-21
  * @author Scott Davis
  */
 package org.mars_sim.msp.core.person.ai.task;
@@ -14,13 +14,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
-import org.mars_sim.msp.core.InventoryUtil;
 import org.mars_sim.msp.core.LocalAreaUtil;
 import org.mars_sim.msp.core.LocalBoundedObject;
 import org.mars_sim.msp.core.Msg;
 import org.mars_sim.msp.core.Simulation;
 import org.mars_sim.msp.core.UnitManager;
-import org.mars_sim.msp.core.equipment.EVASuit;
+import org.mars_sim.msp.core.equipment.EquipmentType;
 import org.mars_sim.msp.core.logging.SimLogger;
 import org.mars_sim.msp.core.person.Person;
 import org.mars_sim.msp.core.person.ai.mission.MissionMember;
@@ -35,8 +34,10 @@ import org.mars_sim.msp.core.structure.building.BuildingManager;
 import org.mars_sim.msp.core.structure.building.function.FunctionType;
 import org.mars_sim.msp.core.tool.RandomUtil;
 import org.mars_sim.msp.core.vehicle.Airlockable;
+import org.mars_sim.msp.core.vehicle.Crewable;
 import org.mars_sim.msp.core.vehicle.Rover;
 import org.mars_sim.msp.core.vehicle.Vehicle;
+import org.mars_sim.msp.core.vehicle.VehicleType;
 
 /**
  * A general walking task that includes interior/exterior walking and
@@ -136,8 +137,8 @@ public class Walk extends Task implements Serializable {
 
 					// Check if person has a good EVA suit available if in a rover.
 					boolean goodEVASuit = true;
-					boolean roverSuit = InventoryUtil.goodEVASuitAvailable(vehicle.getInventory(), person);
-					boolean wearingSuit = person.getInventory().containsUnitClass(EVASuit.class);
+					boolean roverSuit = vehicle.containsEquipment(EquipmentType.EVA_SUIT);
+					boolean wearingSuit = (person.getSuit() != null);
 					goodEVASuit = roverSuit || wearingSuit;
 
 					if (goodEVASuit) {
@@ -153,11 +154,15 @@ public class Walk extends Task implements Serializable {
 							walkToSettlement = true;
 						}
 					}
-
-				} else {
+				}
+				else {
 					// If on a LUV, retrieve person from vehicle.
-					// TODO : should we call endTask() instead ?
-					vehicle.getInventory().retrieveUnit(person);
+					if (person.transfer(unitManager.getMarsSurface())) {
+						logger.info(person, "successfully retrieved " + person + " from " + vehicle.getName());
+					}
+					else {
+						logger.warning(worker, "failed to retrieve " + person + " from " + vehicle.getName());
+					}
 				}
 			}
 
@@ -460,7 +465,7 @@ public class Walk extends Task implements Serializable {
 		try {
 			walkingSteps = new WalkingSteps(person, xLoc, yLoc, zLoc, interiorObject);
 		} catch (Exception e) {
-          	logger.log(Level.SEVERE, "Cannot instantiate walking steps: "+ e.getMessage());
+          	logger.log(Level.SEVERE, "Cannot instantiate walking steps: " + e.getMessage());
 		}
 
 		if (walkingSteps != null)
@@ -670,7 +675,7 @@ public class Walk extends Task implements Serializable {
 	 */
 	private double walkingSettlementInteriorPhase(double time) {
 		double timeLeft = time;
-		setDescription(Msg.getString("Task.description.walk")); //$NON-NLS-1$
+//		setDescription(Msg.getString("Task.description.walk")); //$NON-NLS-1$
 		
 		if (person != null) {
 			logger.log(person, Level.FINE, 0,
@@ -706,13 +711,11 @@ public class Walk extends Task implements Serializable {
 					}
 					else {
 						logger.log(person, Level.SEVERE, 5_000,
-			      				"Could notfind a destination building to go.");
+			      				"Could not find a destination building to go.");
 						endTask();
 					}
 				} else if (person.isOutside()) {
-					logger.log(person, Level.SEVERE, 5_000,
-							"Was not in a building.");
-//					endTask();
+					logger.log(person, Level.SEVERE, 5_000, "Not in a building.");
 					// do this for now so as to debug why this happen and how often
 					setPhase(WALKING_EXTERIOR); // TODO: this certainly violate the logic and is
 					// considered "cheating"
@@ -748,7 +751,7 @@ public class Walk extends Task implements Serializable {
 					// step.building.getNickName());
 					addSubTask(new WalkSettlementInterior(robot, step.building, x, y));
 				} else {
-					logger.log(robot , Level.SEVERE, 5_000,"Was not in a building.");
+					logger.log(robot , Level.SEVERE, 5_000, "Not in a building.");
 //	        		logger.info(robot + " may be at " + robot.getBuildingLocation());
 //	        		logger.info(robot + "'s location is " + robot.getLocationSituation());
 //	        		logger.info(robot + " is in " + robot.getSettlement());
@@ -902,8 +905,6 @@ public class Walk extends Task implements Serializable {
 		setDescription(Msg.getString("Task.description.walk")); //$NON-NLS-1$
 		
 		if (person != null) {
-//			String loc = person.getModifiedLoc();
-
 			logger.log(person, Level.FINER, 4000, 
 					"Calling walkingExteriorPhase().");
 			
@@ -920,28 +921,23 @@ public class Walk extends Task implements Serializable {
 			if (LocalAreaUtil.areLocationsClose(personLocation, stepLocation)) {
 				if (walkingStepIndex < (walkingSteps.getWalkingStepsNumber() - 1)) {
 					walkingStepIndex++;
-					// setDescription("Walking to (" + xx + ", " + yy + ")");
 					setPhase(getWalkingStepPhase());
 				} 
 				else {
 					// setDescription("Arriving at (" + xx + ", " + yy + ")");
 					endTask();
 				}
-			} 
+			}
 			else {
 				if (person.isOutside()) {
-//					LogConsolidated.log(logger, Level.INFO, 4000, sourceName,
-//		      				"[" + person.getLocale() + "] "
-//							+ person + " was " + loc
-//							+ " and starting WalkOutside task.");
-//					logger.info("Walking exterior from (" + x + ", " + y + ") to (" 
+					setDescription("Walking outside toward (" + xx + ", " + yy + ")");
+//					logger.info(person, "Walking outside from (" + x + ", " + y + ") to (" 
 //							+ xx + ", " + yy + ")");
-					
 					addSubTask(new WalkOutside(person, x, y, xx, yy, true));
 				} 
 				else {
 					logger.log(person, Level.SEVERE, 5_000, 
-							"Already physically outside.");
+							"Not being outside.");
 					endTask();
 				}
 			}
@@ -1111,41 +1107,53 @@ public class Walk extends Task implements Serializable {
 		
 		if (person != null) {
 	
-			logger.log(person, Level.FINER, 4000, 
-					"About to exit the rover " + rover.getName() 
-					+ ".");
+//			logger.log(person, Level.FINER, 4_000, 
+//					"About to exit the rover " + rover.getName() 
+//					+ " in " + garageBuilding + ".");
 			
 			// Exit the rover parked inside a garage onto the settlement
 			if (person.isInVehicleInGarage()) {
-				person.transfer(rover, garageBuilding.getSettlement());
-			
-//				rover.getInventory().retrieveUnit(person);
-//				garageBuilding.getSettlementInventory().storeUnit(person); 
-			
-				// Add the person onto the garage
-				BuildingManager.addPersonOrRobotToBuilding(person, garageBuilding);
-
-				logger.log(person, Level.INFO, 4000,
-					"Just exit the rover " + rover.getName() 
-					+ ".");
+				
+				if (rover.removePerson(person)) {
+					rover.getSettlement().addPeopleWithin(person);
+					BuildingManager.addPersonOrRobotToBuilding(person, garageBuilding);
+					logger.log(person, Level.INFO, 4_000, 
+						"Exited rover " + rover.getName() 
+						+ " inside " + garageBuilding + ".");
+					endTask();
+					return timeLeft;
+				}
+//				else {
+//					logger.log(person, Level.WARNING, 4_000, 
+//						"Failed to exit rover " + rover.getName() 
+//						+ " inside " + garageBuilding + ".");
+//				}
 			}
-		} 
+		}
 		
 		else if (robot != null) {
 
-			logger.log(robot, Level.FINER, 4000,
-					"About to exit rover " + rover.getName()
-					+ ".");			
+//			logger.log(robot, Level.FINER, 4_000,
+//					"About to exit rover " + rover.getName()
+//					+ " in " + garageBuilding + ".");			
 
+			// Exit the rover parked inside a garage onto the settlement
 			if (robot.isInVehicleInGarage()) {
-				// Exit the rover inside a garage onto the settlement
-				robot.transfer(rover, garageBuilding.getSettlement());
-		
-				BuildingManager.addPersonOrRobotToBuilding(robot, garageBuilding);
 				
-				logger.log(robot, Level.FINER, 4000, 
-						"Just exited rover " + rover.getName()
-						+ ".");
+				if (rover.removeRobot(robot)) {
+					rover.getSettlement().addRobot(robot);
+					BuildingManager.addPersonOrRobotToBuilding(robot, garageBuilding);
+					logger.log(robot, Level.INFO, 4_000, 
+						"Exited rover " + rover.getName() 
+						+ " inside " + garageBuilding + ".");
+					endTask();
+					return timeLeft;
+				}
+//				else {
+//					logger.log(robot, Level.WARNING, 4_000, 
+//						"Failed to exit rover " + rover.getName() 
+//						+ " inside " + garageBuilding + ".");
+//				}
 			}
 		}
 
@@ -1177,42 +1185,49 @@ public class Walk extends Task implements Serializable {
 		setDescription(Msg.getString("Task.description.walk.enteringRoverInsideGarage")); //$NON-NLS-1$
 		
 		if (person != null) {
-
-			logger.log(person, Level.FINER, 4000, 
-					"About to enter rover " + rover.getName() 
-					+ ".");
+			
+//			logger.log(person, Level.FINER, 4_000, 
+//					"About to enter the rover " + rover.getName() 
+//					+ " in " + garageBuilding + ".");
 			
 			// Place this person within a vehicle inside a garage in a settlement
-			person.transfer(garageBuilding, rover);
-//			garageBuilding.getSettlementInventory().retrieveUnit(person);
-//			rover.getInventory().storeUnit(person);
-			
-			// Remove the person from the garage
-			BuildingManager.removePersonFromBuilding(person, garageBuilding);		
-			
-			logger.log(person, Level.FINER, 4000, 
-					"Just entered rover " + rover.getName() 
-					+ ".");
+			if (rover.addPerson(person)) {
+				rover.getSettlement().removePeopleWithin(person);
+				BuildingManager.removePersonFromBuilding(person, garageBuilding);
+				logger.log(person, Level.INFO, 4_000, 
+						"Entered rover " + rover.getName() 
+						+ " inside " + garageBuilding + ".");
+				endTask();
+				return timeLeft;
+			}
+//			else {
+//				logger.log(person, Level.WARNING, 4_000, 
+//						"Failed to enter rover " + rover.getName() 
+//						+ " inside " + garageBuilding + ".");
+//			}
 		} 
 		
 		else if (robot != null) {
 			
-			logger.log(person, Level.FINER, 4000, 
-					"About to enter rover " + rover.getName()
-					+ ".");
+//			logger.log(robot, Level.FINER, 4_000, 
+//					"About to enter the rover " + rover.getName() 
+//					+ " in " + garageBuilding + ".");
 			
 			// Place this robot within a vehicle inside a garage in a settlement
-			robot.transfer(garageBuilding, rover);
-						
-//			garageBuilding.getSettlementInventory().retrieveUnit(robot);
-//			rover.getInventory().storeUnit(robot);
-			
-			// Remove the robot from the garage
-			BuildingManager.removeRobotFromBuilding(robot, garageBuilding);
-
-			logger.log(robot, Level.FINER, 4000, 
-					"Just entered rover " + rover.getName()
-					+ ".");
+			if (rover.addRobot(robot)) {
+				rover.getSettlement().removeRobot(robot);
+				BuildingManager.removeRobotFromBuilding(robot, garageBuilding);
+				logger.log(robot, Level.INFO, 4_000, 
+					"Entered rover " + rover.getName() 
+					+ " inside " + garageBuilding + ".");
+				endTask();
+				return timeLeft;
+			}
+//			else {
+//				logger.log(robot, Level.WARNING, 4_000, 
+//					"Failed to enter rover " + rover.getName() 
+//					+ " inside " + garageBuilding + ".");
+//			}
 		}
 
 		if (walkingStepIndex < (walkingSteps.getWalkingStepsNumber() - 1)) {

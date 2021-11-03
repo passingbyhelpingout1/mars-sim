@@ -1,7 +1,7 @@
 /*
  * Mars Simulation Project
  * Delivery.java
- * @date 2021-08-28
+ * @date 2021-10-20
  * @author Manny Kung
  */
 package org.mars_sim.msp.core.person.ai.mission;
@@ -47,9 +47,6 @@ public class Delivery extends DroneMission implements Serializable {
 
 	/** Default description. */
 	private static final String DEFAULT_DESCRIPTION = Msg.getString("Mission.description.delivery"); //$NON-NLS-1$
-
-	/** Mission Type enum. */
-	public static final MissionType missionType = MissionType.TRADE;
 	
 	/** Mission phases. */
 	public static final MissionPhase TRADE_DISEMBARKING = new MissionPhase(
@@ -91,7 +88,7 @@ public class Delivery extends DroneMission implements Serializable {
 	 */
 	public Delivery(MissionMember startingMember) {
 		// Use DroneMission constructor.
-		super(DEFAULT_DESCRIPTION, missionType, startingMember);
+		super(DEFAULT_DESCRIPTION, MissionType.DELIVERY, startingMember);
 		
 		// Problem starting Mission
 		if (isDone()) {
@@ -191,7 +188,7 @@ public class Delivery extends DroneMission implements Serializable {
 	public Delivery(MissionMember startingMember, Collection<MissionMember> members, Settlement startingSettlement, Settlement tradingSettlement,
 			Drone drone, String description, Map<Good, Integer> sellGoods, Map<Good, Integer> buyGoods) {
 		// Use DroneMission constructor.
-		super(description, missionType, startingMember, 2, drone);
+		super(description, MissionType.DELIVERY, startingMember, 2, drone);
 
 		outbound = true;
 		doNegotiation = false;
@@ -344,7 +341,7 @@ public class Delivery extends DroneMission implements Serializable {
 		// If drone is not parked at settlement, park it.
 		if ((v != null) && (v.getSettlement() == null)) {
 
-			tradingSettlement.getInventory().storeUnit(v);
+			tradingSettlement.addParkedVehicle(v);
 	
 			// Add vehicle to a garage if available.
 			if (!tradingSettlement.getBuildingManager().addToGarage(v)) {
@@ -451,7 +448,7 @@ public class Delivery extends DroneMission implements Serializable {
 	private void performDestinationUnloadGoodsPhase() {
 
 		// Unload drone if necessary.
-		if (getDrone().getInventory().getTotalInventoryMass(false) == 0D) {
+		if (getDrone().getStoredMass() == 0D) {
 			setPhaseEnded(true);
 		}
 	}
@@ -512,15 +509,11 @@ public class Delivery extends DroneMission implements Serializable {
 				}
 			}
 
-			// Remove from garage if in garage.
-			Building garageBuilding = BuildingManager.getBuilding(getVehicle());
-			if (garageBuilding != null) {
-				VehicleMaintenance garage = garageBuilding.getVehicleMaintenance();
-				garage.removeVehicle(getVehicle());
-			}
+			// If the rover is in a garage, put the rover outside.
+			BuildingManager.removeFromGarage(getVehicle());
 
 			// Embark from settlement
-			tradingSettlement.getInventory().retrieveUnit(getVehicle());
+			tradingSettlement.removeParkedVehicle(getVehicle());
 			setPhaseEnded(true);
 		}
 	}
@@ -612,8 +605,8 @@ public class Delivery extends DroneMission implements Serializable {
 
 		if ((result == 0) && isUsableVehicle(firstVehicle) && isUsableVehicle(secondVehicle)) {
 			// Check if one has more general cargo capacity than the other.
-			double firstCapacity = firstVehicle.getInventory().getGeneralCapacity();
-			double secondCapacity = secondVehicle.getInventory().getGeneralCapacity();
+			double firstCapacity = firstVehicle.getTotalCapacity();
+			double secondCapacity = secondVehicle.getTotalCapacity();
 			if (firstCapacity > secondCapacity) {
 				result = 1;
 			} else if (secondCapacity > firstCapacity) {
@@ -622,9 +615,11 @@ public class Delivery extends DroneMission implements Serializable {
 
 			// Vehicle with superior range should be ranked higher.
 			if (result == 0) {
-				if (firstVehicle.getRange(missionType) > secondVehicle.getRange(missionType)) {
+				double firstRange = firstVehicle.getRange(MissionType.DELIVERY);
+				double secondRange = secondVehicle.getRange(MissionType.DELIVERY);
+				if (firstRange > secondRange) {
 					result = 1;
-				} else if (firstVehicle.getRange(missionType) < secondVehicle.getRange(missionType)) {
+				} else if (firstRange < secondRange) {
 					result = -1;
 				}
 			}

@@ -1,7 +1,7 @@
 /*
  * Mars Simulation Project
  * Mission.java
- * @date 2021-08-29
+ * @date 2021-10-20
  * @author Scott Davis
  */
 package org.mars_sim.msp.core.person.ai.mission;
@@ -24,6 +24,8 @@ import org.mars_sim.msp.core.Msg;
 import org.mars_sim.msp.core.Simulation;
 import org.mars_sim.msp.core.UnitManager;
 import org.mars_sim.msp.core.environment.SurfaceFeatures;
+import org.mars_sim.msp.core.environment.TerrainElevation;
+import org.mars_sim.msp.core.equipment.EquipmentType;
 import org.mars_sim.msp.core.events.HistoricalEvent;
 import org.mars_sim.msp.core.events.HistoricalEventManager;
 import org.mars_sim.msp.core.logging.SimLogger;
@@ -187,7 +189,8 @@ public abstract class Mission implements Serializable, Temporal {
 	protected static MarsClock marsClock;
 	protected static RelationshipManager relationshipManager;
 	protected static CreditManager creditManager;
-	
+	protected static TerrainElevation terrainElevation;
+
 	/**
 	 * Must be synchronised to prevent duplicate ids being assigned via different
 	 * threads.
@@ -215,7 +218,7 @@ public abstract class Mission implements Serializable, Temporal {
 		
 		// Create the date filed timestamp
 		createDateFiled();
-		
+
 		membersMap = new HashMap<>();
 		missionStatus = new CopyOnWriteArrayList<>();
 		members = new ConcurrentLinkedQueue<MissionMember>();
@@ -1292,14 +1295,13 @@ public abstract class Mission implements Serializable, Temporal {
 			
 		if (startingMember != null)	{
 			Person p = (Person)startingMember;
-			if (p.isInSettlement())
-				result = p.getSettlement().getCoordinates();
-				
-			else if (p.isInVehicle() && p.getVehicle() != null)
-				result = p.getVehicle().getCoordinates();
-			
+			Settlement s = p.getSettlement();
+			if (s != null)
+				return s.getCoordinates();	
+			if (p.isInVehicle())
+				return p.getVehicle().getCoordinates();
 			else
-				result = p.getCoordinates();
+				return p.getCoordinates();
 			
 		} else {
 			StringBuilder s = new StringBuilder();
@@ -1355,7 +1357,7 @@ public abstract class Mission implements Serializable, Temporal {
 		if (settlement == null)
 			throw new IllegalArgumentException("Settlement is null");
 		
-		int result = settlement.getInventory().findNumEVASuits(false, false);
+		int result = settlement.findNumContainersOfType(EquipmentType.EVA_SUIT);
 
 		// Leave one suit for settlement use.
 		if (result > 0) {
@@ -1558,7 +1560,7 @@ public abstract class Mission implements Serializable, Temporal {
 	 * @param m {@link MissionManager}
 	 */
 	public static void initializeInstances(Simulation si, MarsClock c, HistoricalEventManager e, 
-			UnitManager u, ScientificStudyManager s, SurfaceFeatures sf, 
+			UnitManager u, ScientificStudyManager s, SurfaceFeatures sf, TerrainElevation te,
 			MissionManager m, RelationshipManager r, PersonConfig pc, CreditManager cm) {
 		sim = si;
 		marsClock = c;		
@@ -1566,6 +1568,7 @@ public abstract class Mission implements Serializable, Temporal {
 		unitManager = u;
 		scientificManager = s;
 		surfaceFeatures = sf;
+		terrainElevation = te;
 		missionManager = m;
 		personConfig = pc;
 		relationshipManager = r;

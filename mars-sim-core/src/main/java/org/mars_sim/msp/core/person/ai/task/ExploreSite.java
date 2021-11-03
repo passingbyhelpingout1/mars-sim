@@ -1,32 +1,29 @@
 /*
  * Mars Simulation Project
  * ExploreSite.java
- * @date 2021-08-28
+ * @date 2021-10-12
  * @author Scott Davis
  */
 package org.mars_sim.msp.core.person.ai.task;
 
 import java.awt.geom.Point2D;
 import java.io.Serializable;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.logging.Level;
 
-import org.mars_sim.msp.core.Inventory;
 import org.mars_sim.msp.core.LocalAreaUtil;
 import org.mars_sim.msp.core.Msg;
-import org.mars_sim.msp.core.Simulation;
-import org.mars_sim.msp.core.Unit;
 import org.mars_sim.msp.core.environment.ExploredLocation;
 import org.mars_sim.msp.core.environment.MineralMap;
-import org.mars_sim.msp.core.equipment.SpecimenBox;
+import org.mars_sim.msp.core.equipment.Container;
+import org.mars_sim.msp.core.equipment.ContainerUtil;
+import org.mars_sim.msp.core.equipment.EquipmentType;
 import org.mars_sim.msp.core.logging.SimLogger;
 import org.mars_sim.msp.core.person.Person;
 import org.mars_sim.msp.core.person.ai.SkillType;
 import org.mars_sim.msp.core.person.ai.mission.Exploration;
 import org.mars_sim.msp.core.person.ai.mission.MissionMember;
 import org.mars_sim.msp.core.person.ai.task.utils.TaskPhase;
-import org.mars_sim.msp.core.resource.ResourceUtil;
 import org.mars_sim.msp.core.tool.RandomUtil;
 import org.mars_sim.msp.core.vehicle.Rover;
 
@@ -76,8 +73,6 @@ public class ExploreSite extends EVAOperation implements Serializable {
 		// Initialize data members.
 		this.site = site;
 		this.rover = rover;
-	
-		
 		
 		// Determine location for field work.
 		Point2D exploreLoc = determineExploreLocation();
@@ -262,18 +257,13 @@ public class ExploreSite extends EVAOperation implements Serializable {
 			double probability = Math.round((1 + site.getNumEstimationImprovement()) * chance * time *100.0)/100.0;
 			if (probability > .8)
 				probability = .8;
-//			logger.info(person, 10_000, "collectRockSamples::probability: " + probability);
 			
 			if (RandomUtil.getRandomDouble(1.0D) <= chance * time) {
-				
-				int randomRock = ResourceUtil.rockSamplesID;
-				
-				Inventory pInv = person.getInventory();
-		        SpecimenBox box = pInv.findASpecimenBox();
+		        Container box = person.findContainer(EquipmentType.SPECIMEN_BOX, false, ROCK_SAMPLES_ID);
 				double mass = RandomUtil.getRandomDouble(AVERAGE_ROCK_SAMPLE_MASS * 2D);
-				double cap = box.getAmountResourceRemainingCapacity(randomRock);
+				double cap = box.getAmountResourceRemainingCapacity(ROCK_SAMPLES_ID);
 				if (mass < cap) {
-					double excess = box.storeAmountResource(randomRock, mass);
+					double excess = box.storeAmountResource(ROCK_SAMPLES_ID, mass);
 					totalCollected += mass - excess;
 				}
 			}
@@ -288,32 +278,42 @@ public class ExploreSite extends EVAOperation implements Serializable {
 	private void improveMineralConcentrationEstimates(double time) {
 		double probability = (time / Exploration.EXPLORING_SITE_TIME) * getEffectiveSkillLevel()
 				* ESTIMATE_IMPROVEMENT_FACTOR;
-		if (RandomUtil.getRandomDouble(1.0D) <= probability) {
-			MineralMap mineralMap = Simulation.instance().getMars().getSurfaceFeatures().getMineralMap();
-			Map<String, Double> estimatedMineralConcentrations = site.getEstimatedMineralConcentrations();
-			Iterator<String> i = estimatedMineralConcentrations.keySet().iterator();
-			while (i.hasNext()) {
-				String mineralType = i.next();
-				double actualConcentration = mineralMap.getMineralConcentration(mineralType, site.getLocation());
-				double estimatedConcentration = estimatedMineralConcentrations.get(mineralType);
-				double estimationDiff = Math.abs(actualConcentration - estimatedConcentration);
-				double estimationImprovement = RandomUtil.getRandomDouble(1D * getEffectiveSkillLevel());
-				if (estimationImprovement > estimationDiff)
-					estimationImprovement = estimationDiff;
-				if (estimatedConcentration < actualConcentration)
-					estimatedConcentration += estimationImprovement;
-				else
-					estimatedConcentration -= estimationImprovement;
-				estimatedMineralConcentrations.put(mineralType, estimatedConcentration);
-			}
-
-			// Add to site mineral concentration estimation improvement number.
-			site.addEstimationImprovement();
+		if ((site.getNumEstimationImprovement() == 0) || (RandomUtil.getRandomDouble(1.0D) <= probability)) {
+			improveSiteEstimates(site, getEffectiveSkillLevel());
+			
 			logger.log(person, Level.INFO, 5_000, 
 					"Exploring at site " + site.getLocation().getFormattedString() 
 					+ ". Estimation Improvement: "
 					+ site.getNumEstimationImprovement() + ".");
 		}
+	}
+	
+	/**
+	 * Improve the mineral estimates for a particular site. Reviewer has a certain
+	 * skill rating. 
+	 * @param site
+	 * @param skill
+	 */
+	public static void improveSiteEstimates(ExploredLocation site, int skill) {
+		MineralMap mineralMap = surfaceFeatures.getMineralMap();
+		Map<String, Double> estimatedMineralConcentrations = site.getEstimatedMineralConcentrations();
+
+		for(String mineralType : estimatedMineralConcentrations.keySet()) {
+			double actualConcentration = mineralMap.getMineralConcentration(mineralType, site.getLocation());
+			double estimatedConcentration = estimatedMineralConcentrations.get(mineralType);
+			double estimationDiff = Math.abs(actualConcentration - estimatedConcentration);
+			double estimationImprovement = RandomUtil.getRandomDouble(1D * skill);
+			if (estimationImprovement > estimationDiff)
+				estimationImprovement = estimationDiff;
+			if (estimatedConcentration < actualConcentration)
+				estimatedConcentration += estimationImprovement;
+			else
+				estimatedConcentration -= estimationImprovement;
+			estimatedMineralConcentrations.put(mineralType, estimatedConcentration);
+		}
+
+		// Add to site mineral concentration estimation improvement number.
+		site.addEstimationImprovement();
 	}
 
 	/**
@@ -322,49 +322,23 @@ public class ExploreSite extends EVAOperation implements Serializable {
 	 * @return true if carrying container.
 	 */
 	private boolean hasSpecimenContainer() {
-		return person.getInventory().containsUnitClass(SpecimenBox.class);
+		return person.containsEquipment(EquipmentType.SPECIMEN_BOX);
 	}
 
 	/**
 	 * Takes the least full specimen container from the rover, if any are available.
 	 * 
-	 * @throws Exception if error taking container.
+	 * @return true if the person receives a specimen container.
 	 */
-	private void takeSpecimenContainer() {
-		Unit container = findLeastFullContainer(rover);
+	private boolean takeSpecimenContainer() {
+		Container container = ContainerUtil.findLeastFullContainer(
+											rover, EquipmentType.SPECIMEN_BOX,
+											ROCK_SAMPLES_ID);
+
 		if (container != null) {
-			if (person.getInventory().canStoreUnit(container, false)) {
-				container.transfer(rover, person);
-			}
+			return container.transfer(person);
 		}
-	}
-
-	/**
-	 * Gets the least full specimen container in the rover.
-	 * 
-	 * @param rover the rover with the inventory to look in.
-	 * @return specimen container or null if none.
-	 */
-	private static SpecimenBox findLeastFullContainer(Rover rover) {
-		SpecimenBox result = null;
-		double mostCapacity = 0D;
-
-		Iterator<SpecimenBox> i = rover.getInventory().findAllSpecimenBoxes().iterator();
-		while (i.hasNext()) {
-			SpecimenBox container = i.next();
-			try {
-				double remainingCapacity = container.getAmountResourceRemainingCapacity(ResourceUtil.rockSamplesID);
-
-				if (remainingCapacity > mostCapacity) {
-					result = container;
-					mostCapacity = remainingCapacity;
-				}
-			} catch (Exception e) {
-	          	logger.log(Level.SEVERE, "Problems calling getAmountResourceRemainingCapacity(): "+ e.getMessage());
-			}
-		}
-
-		return result;
+		return false;
 	}
 
 	/**
@@ -372,12 +346,6 @@ public class ExploreSite extends EVAOperation implements Serializable {
 	 */
 	@Override
 	protected void clearDown() {
-//		logger.info(person, 10_000, "clearDown::totalCollected: " + totalCollected);
-		// Load specimen container in rover.
-		Inventory pInv = person.getInventory();
-		if (pInv.containsUnitClass(SpecimenBox.class)) {
-			SpecimenBox box = pInv.findASpecimenBox();
-			box.transfer(pInv, rover);
-		}
+		returnEquipmentToVehicle(rover);
 	}
 }

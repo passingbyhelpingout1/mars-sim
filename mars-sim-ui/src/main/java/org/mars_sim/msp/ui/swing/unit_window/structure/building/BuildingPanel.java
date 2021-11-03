@@ -1,7 +1,7 @@
-/**
+/*
  * Mars Simulation Project
  * BuildingPanel.java
- * @version 3.2.0 2021-06-20
+ * @date 2021-10-06
  * @author Scott Davis
  */
 package org.mars_sim.msp.ui.swing.unit_window.structure.building;
@@ -10,7 +10,6 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.net.MalformedURLException;
@@ -26,7 +25,9 @@ import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
+import javax.swing.border.EmptyBorder;
 
 import org.mars_sim.msp.core.Msg;
 import org.mars_sim.msp.core.structure.Settlement;
@@ -78,7 +79,6 @@ public class BuildingPanel extends JPanel {
 	private List<BuildingFunctionPanel> functionPanels;
 
 	private JLabel buildingNameLabel;
-	private JPanel namePanel;
 
 	/** The building this panel is for. */
 	private Building building;
@@ -118,11 +118,7 @@ public class BuildingPanel extends JPanel {
 		this.panelName = panelName;
 		this.building = building;
 		this.desktop = desktop;
-//		this.isTranslucent = isTranslucent;
-//		if (isTranslucent) {
-//			setOpaque(false);
-//			setBackground(new Color(0, 0, 0, 128));
-//		}
+
 		init();
 	}
 
@@ -133,16 +129,14 @@ public class BuildingPanel extends JPanel {
 
 		this.functionPanels = new ArrayList<BuildingFunctionPanel>();
 
-		setLayout(new BorderLayout(0, 5));
+		setLayout(new BorderLayout(0, 0));
 
 		setMaximumSize(new Dimension(WIDTH, HEIGHT));
 		setPreferredSize(new Dimension(WIDTH, HEIGHT));
 	
-		namePanel = new JPanel(new GridLayout(2, 1, 0, 0));
-		buildingNameLabel = new JLabel(building.getNickName(), JLabel.CENTER);
-		buildingNameLabel.setFont(new Font("Serif", Font.BOLD, 16));
-		namePanel.add(buildingNameLabel);
-		add(namePanel, BorderLayout.NORTH);
+		JPanel topPanel = new JPanel(new BorderLayout(0, 0));
+//		topPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+		add(topPanel, BorderLayout.NORTH);
 
 		// Add renameBtn for renaming a building
 		JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
@@ -158,8 +152,8 @@ public class BuildingPanel extends JPanel {
 			}
 		});
 		btnPanel.add(renameBtn);
-		namePanel.add(btnPanel);
-
+		topPanel.add(btnPanel, BorderLayout.NORTH);
+		
 		// Prepare function list panel.
 		JPanel functionListPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
 		functionListPanel.setLayout(new BoxLayout(functionListPanel, BoxLayout.Y_AXIS));
@@ -172,34 +166,39 @@ public class BuildingPanel extends JPanel {
 		// CustomScroll scrollPanel = new CustomScroll(functionListPanel);
 		scrollPanel.setPreferredSize(new Dimension(WIDTH, HEIGHT));//UnitWindow.HEIGHT - 300));
 		scrollPanel.getVerticalScrollBar().setUnitIncrement(20);
-		add(scrollPanel, BorderLayout.CENTER);
+		add(scrollPanel, BorderLayout.SOUTH);
 
 		// Add SVG Image loading for the building
-		Dimension expectedDimension = new Dimension(100, 100);
+		Dimension dim = new Dimension(110, 110);
 		// GraphicsNode node = SVGMapUtil.getSVGGraphicsNode("building", buildingType);
 		Settlement settlement = building.getSettlement();
 		// Conclusion: this panel is called only once per opening the unit window
 		// session.
-		SettlementMapPanel svgPanel = new SettlementMapPanel(settlement, building);
+		SettlementMapPanel mapPanel = new SettlementMapPanel(settlement, building);
+//		mapPanel.setPreferredSize(dim);
+//		mapPanel.setMaximumSize(dim);
+//		mapPanel.setMinimumSize(dim);
 
-		svgPanel.setPreferredSize(expectedDimension);
-		svgPanel.setMaximumSize(expectedDimension);
-		svgPanel.setMinimumSize(expectedDimension);
-
-		JPanel borderPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-		borderPanel.setMaximumSize(expectedDimension);
-		borderPanel.setPreferredSize(expectedDimension);
-		borderPanel.add(svgPanel);
+		JPanel svgPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+//		svgPanel.setMaximumSize(dim);
+		svgPanel.setPreferredSize(dim);
+		svgPanel.setBorder(new EmptyBorder(2, 2, 2, 2));
+		svgPanel.add(mapPanel);
 
 		Box box = new Box(BoxLayout.Y_AXIS);
 		box.add(Box.createVerticalGlue());
 		box.setAlignmentX(JComponent.CENTER_ALIGNMENT);
 //		box.setAlignmentY(JComponent.CENTER_ALIGNMENT);
-//		 box.setBorder(BorderFactory.createLineBorder(Color.black, 1, true));
-		box.add(borderPanel);
+//		box.setBorder(BorderFactory.createLineBorder(java.awt.Color.GRAY, 1, true));
+		box.add(svgPanel);
 		box.add(Box.createVerticalGlue());
 		functionListPanel.add(box);
 
+		// Prepare the general info panel 
+		BuildingPanelGeneral buildingPanelGeneral = new BuildingPanelGeneral(building, desktop);
+		functionPanels.add(buildingPanelGeneral);
+		functionListPanel.add(buildingPanelGeneral);
+		
 		// Prepare cooking panel if building has cooking.
 		if (building.hasFunction(FunctionType.COOKING)) {
 //			try {
@@ -437,6 +436,9 @@ public class BuildingPanel extends JPanel {
 		// setPanelStyle(maintenancePanel);
 
 //        setPanelTranslucent();
+		
+		JScrollBar verticalScrollBar = scrollPanel.getVerticalScrollBar();
+		verticalScrollBar.setValue(verticalScrollBar.getMinimum());
 	}
 
 

@@ -326,7 +326,7 @@ public class GlobeDisplay extends WebComponent implements ClockListener {
 	public void showGlobe(Coordinates newCenter) {
 		if (!centerCoords.equals(newCenter)) {
 			recreate = true;
-			centerCoords.setCoords(newCenter);
+			centerCoords = newCenter;
 		}
 		updateDisplay();
 	}
@@ -521,7 +521,6 @@ public class GlobeDisplay extends WebComponent implements ClockListener {
 
 		// Coordinates sunDirection = mars.getOrbitInfo().getSunDirection();
 
-		Coordinates location = new Coordinates(0D, 0D);
 		// for (int x = 0; x < 150; x++) {
 		// for (int y = 0; y < 150; y++) {
 		for (int x = 0; x < globalWidth * 2; x++) {
@@ -529,7 +528,7 @@ public class GlobeDisplay extends WebComponent implements ClockListener {
 				int xDiff = x - centerX;
 				int yDiff = y - centerY;
 				if (Math.sqrt((xDiff * xDiff) + (yDiff * yDiff)) <= 47.74648293D) {
-					centerCoords.convertRectToSpherical(xDiff, yDiff, 47.74648293D, location);
+					Coordinates location = centerCoords.convertRectToSpherical(xDiff, yDiff, 47.74648293D);
 
 					double sunlight = 1D;
 					try {

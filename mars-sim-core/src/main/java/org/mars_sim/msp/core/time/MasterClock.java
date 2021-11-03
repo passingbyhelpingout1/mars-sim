@@ -55,7 +55,7 @@ public class MasterClock implements Serializable {
 	// Allow for long simulation steps. 15 seconds
 	// Note if debugging this triggers but the next pulse will reactivate
 	private static final long MAX_ELAPSED = 30000;
-	private static final int UI_COUNT = 5;
+	private static final int UI_COUNT = 4;
 	/** The base value of time ratio from simulation.xml. */	
 	private static int BASE_TR;
 	
@@ -646,12 +646,6 @@ public class MasterClock implements Serializable {
 			
 			// Reset saveType back to zero
 			saveType = SaveType.NONE;
-
-			// Store the modified root and its content.
-			SimulationConfig sc = SimulationConfig.instance();
-			if (sc.isStorageManagerRunning())
-				sc.storeRoot();
-			
 			
 			return true;
 		}

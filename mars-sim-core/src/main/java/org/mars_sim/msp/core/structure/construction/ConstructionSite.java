@@ -478,6 +478,20 @@ implements Serializable, LocalBoundedObject {
     	return constructionManager;
     }
 
+	/**
+	 * Gets the associated settlement this unit is with
+	 * 
+	 * @return the associated settlement
+	 */
+	public Settlement getAssociatedSettlement() {
+		return settlement;
+	}
+	
+	/**
+	 * Gets the settlement this unit is with
+	 * 
+	 * @return the settlement
+	 */
     public Settlement getSettlement() {
     	return settlement;
     }
@@ -540,7 +554,17 @@ implements Serializable, LocalBoundedObject {
 	}
 
 	@Override
-	protected UnitType getUnitType() {
+	public UnitType getUnitType() {
 		return UnitType.CONSTRUCTION;
+	}
+	
+	/**
+	 * Is this unit inside a settlement
+	 * 
+	 * @return true if the unit is inside a settlement
+	 */
+	@Override
+	public boolean isInSettlement() {
+		return false;
 	}
 }

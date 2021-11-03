@@ -1,7 +1,7 @@
 /*
  * Mars Simulation Project
  * Trade.java
- * @date 2021-08-28
+ * @date 2021-10-20
  * @author Scott Davis
  */
 package org.mars_sim.msp.core.person.ai.mission;
@@ -15,10 +15,12 @@ import java.util.Map;
 import java.util.logging.Level;
 
 import org.mars_sim.msp.core.Coordinates;
+import org.mars_sim.msp.core.InventoryUtil;
 import org.mars_sim.msp.core.LocalAreaUtil;
 import org.mars_sim.msp.core.Msg;
 import org.mars_sim.msp.core.Simulation;
 import org.mars_sim.msp.core.equipment.EVASuit;
+import org.mars_sim.msp.core.equipment.EquipmentType;
 import org.mars_sim.msp.core.logging.SimLogger;
 import org.mars_sim.msp.core.person.Person;
 import org.mars_sim.msp.core.person.ai.SkillType;
@@ -50,7 +52,7 @@ public class Trade extends RoverMission implements Serializable {
 	private static final String DEFAULT_DESCRIPTION = Msg.getString("Mission.description.trade"); //$NON-NLS-1$
 
 	/** Mission Type enum. */
-	public static final MissionType missionType = MissionType.TRADE;
+	private static final MissionType MISSION_TYPE = MissionType.TRADE;
 	
 	/** Mission phases. */
 	public static final MissionPhase TRADE_DISEMBARKING = new MissionPhase(
@@ -92,7 +94,7 @@ public class Trade extends RoverMission implements Serializable {
 	 */
 	public Trade(MissionMember startingMember) {
 		// Use RoverMission constructor.
-		super(DEFAULT_DESCRIPTION, missionType, startingMember);
+		super(DEFAULT_DESCRIPTION, MISSION_TYPE, startingMember);
 
 		// Problem setting up the mission
 		if (isDone()) {
@@ -193,7 +195,7 @@ public class Trade extends RoverMission implements Serializable {
 	public Trade(Collection<MissionMember> members, Settlement startingSettlement, Settlement tradingSettlement,
 			Rover rover, String description, Map<Good, Integer> sellGoods, Map<Good, Integer> buyGoods) {
 		// Use RoverMission constructor.
-		super(description, missionType, (MissionMember) members.toArray()[0], RoverMission.MIN_GOING_MEMBERS, rover);
+		super(description, MISSION_TYPE, (MissionMember) members.toArray()[0], RoverMission.MIN_GOING_MEMBERS, rover);
 
 		Person person = null;
 //		Robot robot = null;
@@ -352,7 +354,7 @@ public class Trade extends RoverMission implements Serializable {
 		// If rover is not parked at settlement, park it.
 		if ((v != null) && (v.getSettlement() == null)) {
 
-			tradingSettlement.getInventory().storeUnit(v);
+			tradingSettlement.addParkedVehicle(v);
 	
 			// Add vehicle to a garage if available.
 			if (!tradingSettlement.getBuildingManager().addToGarage(v)) {
@@ -479,7 +481,7 @@ public class Trade extends RoverMission implements Serializable {
 		unloadTowedVehicle();
 
 		// Unload rover if necessary.
-		boolean roverUnloaded = getRover().getInventory().getTotalInventoryMass(false) == 0D;
+		boolean roverUnloaded = getRover().getStoredMass() == 0D;
 		if (roverUnloaded) {
 			setPhaseEnded(true);
 		}
@@ -517,7 +519,7 @@ public class Trade extends RoverMission implements Serializable {
 			towed.setReservedForMission(false);
 			getRover().setTowedVehicle(null);
 			towed.setTowingVehicle(null);
-			tradingSettlement.getInventory().storeUnit(towed);
+			tradingSettlement.addParkedVehicle(towed);
 			towed.findNewParkingLoc();
 		}
 	}
@@ -534,7 +536,7 @@ public class Trade extends RoverMission implements Serializable {
 					buyVehicle.setReservedForMission(true);
 					getRover().setTowedVehicle(buyVehicle);
 					buyVehicle.setTowingVehicle(getRover());
-					tradingSettlement.getInventory().retrieveUnit(buyVehicle);
+					tradingSettlement.removeParkedVehicle(buyVehicle);
 				} else {	
 					logger.warning(getRover(), "Selling vehicle (" + vehicleType + ") is not available (Trade).");
 					addMissionStatus(MissionStatus.SELLING_VEHICLE_NOT_AVAILABLE_FOR_TRADE);
@@ -585,13 +587,15 @@ public class Trade extends RoverMission implements Serializable {
 			for (MissionMember mm: getMembers()) {
 				if (mm instanceof Person) {
 					Person person = (Person) mm;
-					if (person.isDeclaredDead()) {
-						EVASuit suit0 = getVehicle().getInventory().findAnEVAsuit(person);
+					if (!person.isDeclaredDead()) {
+						EVASuit suit0 = getVehicle().findEVASuit(person);
 						if (suit0 == null) { 
-							if (tradingSettlement.getInventory().findNumEVASuits(false, false) > 0) {
-								EVASuit suit1 = tradingSettlement.getInventory().findAnEVAsuit(person); 
-								if (suit1 != null && getVehicle().getInventory().canStoreUnit(suit1, false)) {
-									suit1.transfer(tradingSettlement, getVehicle());
+							if (tradingSettlement.findNumContainersOfType(EquipmentType.EVA_SUIT) > 0) {
+								EVASuit suit1 = InventoryUtil.getGoodEVASuitNResource(tradingSettlement, person); 
+								if (suit1 != null) {
+									boolean done = suit1.transfer(getVehicle());
+									if (!done)
+										logger.warning(person, "Not able to transfer an EVA suit from " + tradingSettlement);
 								} else {
 									logger.warning(person, "EVA suit not provided for by " + tradingSettlement);
 								}
@@ -614,15 +618,11 @@ public class Trade extends RoverMission implements Serializable {
 		// If rover is loaded and everyone is aboard, embark from settlement.
 		if (!isDone() && isEveryoneInRover()) {
 
-			// Remove from garage if in garage.
-			Building garageBuilding = BuildingManager.getBuilding(getVehicle());
-			if (garageBuilding != null) {
-				VehicleMaintenance garage = garageBuilding.getVehicleMaintenance();
-				garage.removeVehicle(getVehicle());
-			}
+			// If the rover is in a garage, put the rover outside.
+			BuildingManager.removeFromGarage(getVehicle());
 
 			// Embark from settlement
-			tradingSettlement.getInventory().retrieveUnit(getVehicle());
+			tradingSettlement.removeParkedVehicle(getVehicle());
 			setPhaseEnded(true);
 		}
 	}
@@ -639,7 +639,7 @@ public class Trade extends RoverMission implements Serializable {
 					sellVehicle.setReservedForMission(true);
 					getRover().setTowedVehicle(sellVehicle);
 					sellVehicle.setTowingVehicle(getRover());
-					getStartingSettlement().getInventory().retrieveUnit(sellVehicle);
+					getStartingSettlement().removeParkedVehicle(sellVehicle);
 				} else {
 					logger.warning(getRover(), "Selling vehicle (" + vehicleType + ") is not available (Trade).");
 					addMissionStatus(MissionStatus.SELLING_VEHICLE_NOT_AVAILABLE_FOR_TRADE);
@@ -658,7 +658,7 @@ public class Trade extends RoverMission implements Serializable {
 			towed.setReservedForMission(false);
 			getRover().setTowedVehicle(null);
 			towed.setTowingVehicle(null);
-			disembarkSettlement.getInventory().storeUnit(towed);
+			disembarkSettlement.addParkedVehicle(towed);
 			towed.findNewParkingLoc();
 		}
 
@@ -726,7 +726,7 @@ public class Trade extends RoverMission implements Serializable {
 			Iterator<Vehicle> j = settlement.getParkedVehicles().iterator();
 			while (j.hasNext()) {
 				Vehicle vehicle = j.next();
-				boolean isEmpty = vehicle.getInventory().isEmpty(false);
+				boolean isEmpty = vehicle.isEmpty();
 				if (vehicleType.equalsIgnoreCase(vehicle.getDescription())) {
 					if ((vehicle != getVehicle()) && !vehicle.isReserved() && isEmpty) {
 						result = vehicle;
@@ -819,8 +819,8 @@ public class Trade extends RoverMission implements Serializable {
 
 		if ((result == 0) && isUsableVehicle(firstVehicle) && isUsableVehicle(secondVehicle)) {
 			// Check if one has more general cargo capacity than the other.
-			double firstCapacity = firstVehicle.getInventory().getGeneralCapacity();
-			double secondCapacity = secondVehicle.getInventory().getGeneralCapacity();
+			double firstCapacity = firstVehicle.getTotalCapacity();
+			double secondCapacity = secondVehicle.getTotalCapacity();
 			if (firstCapacity > secondCapacity) {
 				result = 1;
 			} else if (secondCapacity > firstCapacity) {
@@ -829,9 +829,9 @@ public class Trade extends RoverMission implements Serializable {
 
 			// Vehicle with superior range should be ranked higher.
 			if (result == 0) {
-				if (firstVehicle.getRange(missionType) > secondVehicle.getRange(missionType)) {
+				if (firstVehicle.getRange(MISSION_TYPE) > secondVehicle.getRange(MISSION_TYPE)) {
 					result = 1;
-				} else if (firstVehicle.getRange(missionType) < secondVehicle.getRange(missionType)) {
+				} else if (firstVehicle.getRange(MISSION_TYPE) < secondVehicle.getRange(MISSION_TYPE)) {
 					result = -1;
 				}
 			}

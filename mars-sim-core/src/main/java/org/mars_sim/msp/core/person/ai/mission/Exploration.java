@@ -9,24 +9,23 @@ package org.mars_sim.msp.core.person.ai.mission;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.mars_sim.msp.core.Coordinates;
 import org.mars_sim.msp.core.Direction;
-import org.mars_sim.msp.core.Inventory;
 import org.mars_sim.msp.core.Msg;
 import org.mars_sim.msp.core.Simulation;
 import org.mars_sim.msp.core.environment.ExploredLocation;
 import org.mars_sim.msp.core.environment.MineralMap;
 import org.mars_sim.msp.core.equipment.EquipmentType;
-import org.mars_sim.msp.core.equipment.SpecimenBox;
 import org.mars_sim.msp.core.logging.SimLogger;
 import org.mars_sim.msp.core.person.Person;
-import org.mars_sim.msp.core.person.PhysicalCondition;
 import org.mars_sim.msp.core.person.ai.SkillType;
 import org.mars_sim.msp.core.person.ai.job.JobType;
 import org.mars_sim.msp.core.person.ai.task.EVAOperation;
@@ -59,7 +58,7 @@ public class Exploration extends RoverMission
 	private static final String DEFAULT_DESCRIPTION = Msg.getString("Mission.description.exploration"); //$NON-NLS-1$
 
 	/** Mission Type enum. */
-	public static final MissionType missionType = MissionType.EXPLORATION;
+	public static final MissionType MISSION_TYPE = MissionType.EXPLORATION;
 	
 	/** Mission phase. */
 	public static final MissionPhase EXPLORE_SITE = new MissionPhase(Msg.getString("Mission.phase.exploreSite")); //$NON-NLS-1$
@@ -77,7 +76,10 @@ public class Exploration extends RoverMission
 	public static final double EXPLORING_SITE_TIME = 500D;
 
 	/** Maximum mineral concentration estimation diff from actual. */
-	private static final double MINERAL_ESTIMATION_CEILING = 20D;
+	private static final double MINERAL_ESTIMATION_VARIANCE = 20D;
+
+	/** Maximum mineral estimation */
+	private static final double MINERAL_ESTIMATION_MAX = 100D;
 
 	// Data members
 	/** Map of exploration sites and their completion. */
@@ -90,11 +92,6 @@ public class Exploration extends RoverMission
 	private List<ExploredLocation> exploredSites;
 	/** External flag for ending exploration at the current site. */
 	private boolean endExploringSite;
-
-	// Static members
-	private static final int oxygenID = ResourceUtil.oxygenID;
-	private static final int waterID = ResourceUtil.waterID;
-	private static final int foodID = ResourceUtil.foodID;
 	
 	/**
 	 * Constructor.
@@ -105,7 +102,7 @@ public class Exploration extends RoverMission
 	public Exploration(Person startingPerson) {
 
 		// Use RoverMission constructor.
-		super(DEFAULT_DESCRIPTION, missionType, startingPerson, RoverMission.MIN_GOING_MEMBERS);
+		super(DEFAULT_DESCRIPTION, MISSION_TYPE, startingPerson, RoverMission.MIN_GOING_MEMBERS);
 		
 		Settlement s = startingPerson.getSettlement();
 
@@ -113,8 +110,8 @@ public class Exploration extends RoverMission
 
 			// Initialize data members.
 			setStartingSettlement(s);
-			exploredSites = new ArrayList<ExploredLocation>(NUM_SITES);
-			explorationSiteCompletion = new HashMap<String, Double>(NUM_SITES);
+			exploredSites = new ArrayList<>(NUM_SITES);
+			explorationSiteCompletion = new HashMap<>(NUM_SITES);
 			
 			// Set mission capacity.
 			if (hasVehicle())
@@ -124,8 +121,6 @@ public class Exploration extends RoverMission
 			if (availableSuitNum < getMissionCapacity())
 				setMissionCapacity(availableSuitNum);
 
-			// Create a list of sites to be explored during the stage of mission planning
-			createNewExploredSite();
 
 			// Recruit additional members to mission.
 			if (!recruitMembersForMission(startingPerson))
@@ -135,8 +130,9 @@ public class Exploration extends RoverMission
 			try {
 				if (hasVehicle()) {
 					int skill = startingPerson.getSkillManager().getEffectiveSkillLevel(SkillType.AREOLOGY);
-					determineExplorationSites(getVehicle().getRange(missionType),
-							getTotalTripTimeLimit(getRover(), getPeopleNumber(), true), NUM_SITES, skill);
+					determineExplorationSites(getVehicle().getRange(MISSION_TYPE),
+							getTotalTripTimeLimit(getRover(), getPeopleNumber(), true),
+							NUM_SITES, skill);
 					if (explorationSiteCompletion.size() == 0) {
 						addMissionStatus(MissionStatus.NO_EXPLORATION_SITES);
 						endMission();
@@ -145,6 +141,12 @@ public class Exploration extends RoverMission
 			} catch (Exception e) {
 				addMissionStatus(MissionStatus.NO_EXPLORATION_SITES);
 				endMission();
+			}
+
+			// Create a list of sites to be explored during the stage of mission planning
+			// 1st one is the starting point
+			for(int i = 1; i < getNumberOfNavpoints(); i++) {
+				createAExploredSite(getNavpoint(i).getLocation());
 			}
 
 			// Add home settlement
@@ -181,7 +183,7 @@ public class Exploration extends RoverMission
 			List<Coordinates> explorationSites, Rover rover, String description) {
 
 		// Use RoverMission constructor.
-		super(description, missionType, (MissionMember) members.toArray()[0], RoverMission.MIN_GOING_MEMBERS, rover);
+		super(description, MISSION_TYPE, (MissionMember) members.toArray()[0], RoverMission.MIN_GOING_MEMBERS, rover);
 
 		// Check if vehicle can carry enough supplies for the mission.
 		if (hasVehicle() && !isVehicleLoadable()) {
@@ -198,11 +200,13 @@ public class Exploration extends RoverMission
 			setMissionCapacity(availableSuitNum);
 
 		// Initialize explored sites.
-		exploredSites = new ArrayList<ExploredLocation>(NUM_SITES);
-		explorationSiteCompletion = new HashMap<String, Double>(NUM_SITES);
+		exploredSites = new ArrayList<>(NUM_SITES);
+		explorationSiteCompletion = new HashMap<>(NUM_SITES);
 
-//		// Configure the sites to be explored with mineral concentration during the stage of mission planning
-		configuredExploredSite(explorationSites);
+		// Configure the sites to be explored with mineral concentration during the stage of mission planning
+		for(Coordinates c : explorationSites) {
+			createAExploredSite(c);
+		}
 				
 		// Set exploration navpoints.
 		for (int x = 0; x < explorationSites.size(); x++) {
@@ -252,7 +256,7 @@ public class Exploration extends RoverMission
 	 */
 	public static boolean hasNearbyMineralLocations(Rover rover, Settlement homeSettlement) {
 
-		double roverRange = rover.getRange(missionType);
+		double roverRange = rover.getRange(MISSION_TYPE);
 		double tripTimeLimit = getTotalTripTimeLimit(rover, rover.getCrewCapacity(), true);
 		double tripRange = getTripTimeRange(tripTimeLimit, rover.getBaseSpeed() / 1.25D);
 		double range = roverRange;
@@ -278,7 +282,7 @@ public class Exploration extends RoverMission
 	public static Map<String, Double> getNearbyMineral(Rover rover, Settlement homeSettlement) {
 		Map<String, Double> minerals = new HashMap<>();
 		
-		double roverRange = rover.getRange(missionType);
+		double roverRange = rover.getRange(MISSION_TYPE);
 		double tripTimeLimit = getTotalTripTimeLimit(rover, rover.getCrewCapacity(), true);
 		double tripRange = getTripTimeRange(tripTimeLimit, rover.getBaseSpeed() / 1.25D);
 		double range = roverRange;
@@ -342,9 +346,6 @@ public class Exploration extends RoverMission
 					Msg.getString("Mission.phase.travelling.description", getNextNavpoint().getDescription())); // $NON-NLS-1$
 		} 
 		
-//		else if (DISEMBARKING.equals(getPhase()))
-//			endMission(ALL_DISEMBARKED);
-		
 		else if (DISEMBARKING.equals(getPhase())) {
 			setPhase(VehicleMission.COMPLETED);
 			setPhaseDescription(
@@ -392,12 +393,14 @@ public class Exploration extends RoverMission
 	 * @return
 	 */
 	private ExploredLocation retrieveCurrentSite() {
+		Coordinates current = getCurrentMissionLocation();
 		for (ExploredLocation e: exploredSites) {
-			if (e.getLocation().equals(getCurrentMissionLocation()))
+			if (e.getLocation().equals(current))
 				return e;
 		}
 
-		return createAExploredSite();
+		// Should never get here
+		return createAExploredSite(current);
 	}
 	
 	/**
@@ -508,46 +511,6 @@ public class Exploration extends RoverMission
 			currentSite = null;
 		}
 	}
-	
-	/**
-	 * Gets a list of navpoint site coordinates
-	 * 
-	 * @return
-	 */
-	public List<Coordinates> getSiteCoordinates() {
-		return ((TravelMission)this).getNavCoordinates();
-	}
-	
-	/**
-	 * Creates a new site at the current location, creates initial
-	 * estimates for mineral concentrations, and adds it to the explored site list.
-	 * 
-	 * @throws MissionException if error creating explored site.
-	 */
-	private void createNewExploredSite() {
-		MineralMap mineralMap = surfaceFeatures.getMineralMap();
-		String[] mineralTypes = mineralMap.getMineralTypeNames();
-		
-		List<Coordinates> coords = getSiteCoordinates();
-		for (Coordinates c: coords) {
-			Map<String, Double> initialMineralEstimations = new HashMap<String, Double>(mineralTypes.length);
-			for (String mineralType : mineralTypes) {
-				double estimation = RandomUtil.getRandomDouble(MINERAL_ESTIMATION_CEILING * 2D)
-						- MINERAL_ESTIMATION_CEILING;
-				double actualConcentration = mineralMap.getMineralConcentration(mineralType, c);//getCurrentMissionLocation());
-				estimation += actualConcentration;
-				if (estimation < 0D)
-					estimation = 0D - estimation;
-				else if (estimation > 100D)
-					estimation = 100D - estimation;
-				initialMineralEstimations.put(mineralType, estimation);
-			}
-			
-			ExploredLocation el = surfaceFeatures.addExploredLocation(c, //getCurrentMissionLocation()),
-					initialMineralEstimations, getAssociatedSettlement());
-			exploredSites.add(el);
-		}
-	}
 
 	/**
 	 * Creates a brand new site at the current location and 
@@ -556,65 +519,34 @@ public class Exploration extends RoverMission
 	 * @throws MissionException if error creating explored site.
 	 * @return ExploredLocation
 	 */
-	private ExploredLocation createAExploredSite() {
-		MineralMap mineralMap = surfaceFeatures.getMineralMap();
-		String[] mineralTypes = mineralMap.getMineralTypeNames();
-		Coordinates c = getCurrentMissionLocation();
-//		List<Coordinates> coords = getSiteCoordinates();
-//		for (Coordinates c: coords) {
-			Map<String, Double> initialMineralEstimations = new HashMap<String, Double>(mineralTypes.length);
-			for (String mineralType : mineralTypes) {
-				double estimation = RandomUtil.getRandomDouble(MINERAL_ESTIMATION_CEILING * 2D)
-						- MINERAL_ESTIMATION_CEILING;
-				double actualConcentration = mineralMap.getMineralConcentration(mineralType, c);//getCurrentMissionLocation());
-				estimation += actualConcentration;
-				if (estimation < 0D)
-					estimation = 0D - estimation;
-				else if (estimation > 100D)
-					estimation = 100D - estimation;
-				initialMineralEstimations.put(mineralType, estimation);
-			}
-			
-			ExploredLocation el = surfaceFeatures.addExploredLocation(c, //getCurrentMissionLocation()),
-					initialMineralEstimations, getAssociatedSettlement());
-//			exploredSites.add(el);
-//		}
-		return el;
-	}
-	
-	/**
-	 * Configure a new site at the current location, creates initial
-	 * estimates for mineral concentrations, and adds it to the explored site list.
-	 * 
-	 * @param coords
-	 * @throws MissionException if error creating explored site.
-	 */
-	private void configuredExploredSite(List<Coordinates> coords) {
+	private ExploredLocation createAExploredSite(Coordinates siteLocation) {
 		MineralMap mineralMap = surfaceFeatures.getMineralMap();
 		String[] mineralTypes = mineralMap.getMineralTypeNames();
 		
-		for (Coordinates c: coords) {
-			Map<String, Double> initialMineralEstimations = new HashMap<String, Double>(mineralTypes.length);
+		// Make sure site is not known already
+		ExploredLocation el = surfaceFeatures.getExploredLocation(siteLocation);
+		if (el == null) {
+			// bUILD A NEW SITE
+			Map<String, Double> initialMineralEstimations = new HashMap<>(mineralTypes.length);
 			for (String mineralType : mineralTypes) {
-				double estimation = RandomUtil.getRandomDouble(MINERAL_ESTIMATION_CEILING * 2D)
-						- MINERAL_ESTIMATION_CEILING;
-				double actualConcentration = mineralMap.getMineralConcentration(mineralType, c);//getCurrentMissionLocation());
-				estimation += actualConcentration;
+				// Estimations are zero for initial site.
+				double estimation = RandomUtil.getRandomDouble(MINERAL_ESTIMATION_VARIANCE);
+				estimation += mineralMap.getMineralConcentration(mineralType, siteLocation);
 				if (estimation < 0D)
 					estimation = 0D - estimation;
-				else if (estimation > 100D)
-					estimation = 100D - estimation;
+				else if (estimation > MINERAL_ESTIMATION_MAX)
+					estimation = MINERAL_ESTIMATION_MAX - estimation;
 				initialMineralEstimations.put(mineralType, estimation);
 			}
 			
-			ExploredLocation el = surfaceFeatures.addExploredLocation(c, //getCurrentMissionLocation()),
+			el = surfaceFeatures.addExploredLocation(siteLocation,
 					initialMineralEstimations, getAssociatedSettlement());
-			exploredSites.add(el);
 		}
+		
+		exploredSites.add(el);
+		return el;
 	}
 	
-
-
 	@Override
 	public double getEstimatedRemainingMissionTime(boolean useBuffer) {
 		double result = super.getEstimatedRemainingMissionTime(useBuffer);
@@ -633,7 +565,6 @@ public class Exploration extends RoverMission
 
 		// Add estimated remaining exploration time at current site if still there.
 		if (EXPLORE_SITE.equals(getPhase())) {
-//			MarsClock currentTime = Simulation.instance().getMasterClock().getMarsClock();
 			double timeSpentAtExplorationSite = MarsClock.getTimeDiff(Simulation.instance().getMasterClock().getMarsClock(), explorationSiteStartTime);
 			double remainingTime = EXPLORING_SITE_TIME - timeSpentAtExplorationSite;
 			if (remainingTime > 0D)
@@ -656,24 +587,8 @@ public class Exploration extends RoverMission
 
 		int crewNum = getPeopleNumber();
 
-		// Determine life support supplies needed for trip.
-		double oxygenAmount = PhysicalCondition.getOxygenConsumptionRate()// * Mission.OXYGEN_MARGIN
-				* timeSols * crewNum;
-		if (result.containsKey(oxygenID))
-			oxygenAmount += (Double) result.get(oxygenID);
-		result.put(oxygenID, oxygenAmount);
-
-		double waterAmount = PhysicalCondition.getWaterConsumptionRate()// * Mission.WATER_MARGIN
-				* timeSols * crewNum;
-		if (result.containsKey(waterID))
-			waterAmount += (Double) result.get(waterID);
-		result.put(waterID, waterAmount);
-
-		double foodAmount = PhysicalCondition.getFoodConsumptionRate()// * Mission.FOOD_MARGIN
-				* timeSols * crewNum;
-		if (result.containsKey(foodID))
-			foodAmount += (Double) result.get(foodID);
-		result.put(foodID, foodAmount);
+		// Add the maount for the site visits
+		addLifeSupportResources(result, crewNum, timeSols, useBuffer);
 
 		return result;
 	}
@@ -739,53 +654,11 @@ public class Exploration extends RoverMission
 			Map<Integer, Integer> result = new HashMap<>();
 
 			// Include required number of specimen containers.
-			result.put(EquipmentType.convertName2ID(SpecimenBox.TYPE), REQUIRED_SPECIMEN_CONTAINERS);
+			result.put(EquipmentType.getResourceID(EquipmentType.SPECIMEN_BOX), REQUIRED_SPECIMEN_CONTAINERS);
 
 			equipmentNeededCache = result;
 			return result;
 		}
-	}
-
-	/**
-	 * Gets the time limit of the trip based on life support capacity.
-	 * 
-	 * @param useBuffer use time buffer in estimation if true.
-	 * @return time (millisols) limit.
-	 * @throws MissionException if error determining time limit.
-	 */
-	public static double getTotalTripTimeLimit(Rover rover, int memberNum, boolean useBuffer) {
-
-		Inventory vInv = rover.getInventory();
-
-		double timeLimit = Double.MAX_VALUE;
-
-		// Check food capacity as time limit.
-		double foodConsumptionRate = personConfig.getFoodConsumptionRate();
-		double foodCapacity = vInv.getAmountResourceCapacity(foodID, false);
-		double foodTimeLimit = foodCapacity / (foodConsumptionRate * memberNum);
-		if (foodTimeLimit < timeLimit)
-			timeLimit = foodTimeLimit;
-
-		// Check water capacity as time limit.
-		double waterConsumptionRate = personConfig.getWaterConsumptionRate();
-		double waterCapacity = vInv.getAmountResourceCapacity(waterID, false);
-		double waterTimeLimit = waterCapacity / (waterConsumptionRate * memberNum);
-		if (waterTimeLimit < timeLimit)
-			timeLimit = waterTimeLimit;
-
-		// Check oxygen capacity as time limit.
-		double oxygenConsumptionRate = personConfig.getNominalO2ConsumptionRate();
-		double oxygenCapacity = vInv.getAmountResourceCapacity(oxygenID, false);
-		double oxygenTimeLimit = oxygenCapacity / (oxygenConsumptionRate * memberNum);
-		if (oxygenTimeLimit < timeLimit)
-			timeLimit = oxygenTimeLimit;
-
-		// Convert timeLimit into millisols and use error margin.
-		timeLimit = (timeLimit * 1000D);
-		if (useBuffer)
-			timeLimit /= Vehicle.getLifeSupportRangeErrorMargin();
-
-		return timeLimit;
 	}
 
 	/**
@@ -810,31 +683,47 @@ public class Exploration extends RoverMission
 			range = timeRange;
 		}
 		
-		// Get the current location.
-		Coordinates startingLocation = getCurrentMissionLocation();
 
 		// Determine the first exploration site.
-		Coordinates newLocation = determineFirstExplorationSite((range / 2D), areologySkill);
-		if (newLocation != null) {
-			unorderedSites.add(newLocation);
-		} else
+		Coordinates startingLocation = getCurrentMissionLocation();
+		Coordinates currentLocation = null;
+		List<Coordinates> outstandingSites = findOutstandingSites(startingLocation);
+		if (!outstandingSites.isEmpty()) {
+			currentLocation = outstandingSites.remove(0);
+		}
+		else {
+			currentLocation = determineFirstExplorationSite((range / 2D), areologySkill);
+		}
+		if (currentLocation != null) {
+			unorderedSites.add(currentLocation);
+		}
+		else
 			throw new IllegalStateException(getPhase() + " : Could not determine first exploration site.");
 
-		double siteDistance = Coordinates.computeDistance(startingLocation, newLocation);
-		Coordinates currentLocation = newLocation;
 
 		// Determine remaining exploration sites.
+		double siteDistance = Coordinates.computeDistance(startingLocation, currentLocation);
 		double remainingRange = (range / 2D) - siteDistance;
-		for (int x = 1; x < numSites; x++) {
-			if (remainingRange > 1D) {
-				Direction direction = new Direction(RandomUtil.getRandomDouble(2D * Math.PI));
-				limit = range / 4D;
-				siteDistance = RandomUtil.getRandomRegressionInteger(confidence, (int)limit);
-				newLocation = currentLocation.getNewLocation(direction, siteDistance);
-				unorderedSites.add(newLocation);
-				currentLocation = newLocation;
-				remainingRange -= siteDistance;
-			}
+		
+		// Add in some existing ones first
+		while ((unorderedSites.size() < numSites)  && (remainingRange > 1D)
+				&& !outstandingSites.isEmpty()) {
+			// Take the next one off the front
+			Coordinates nextLocation = outstandingSites.remove(0);
+			unorderedSites.add(nextLocation);
+			remainingRange -= nextLocation.getDistance(currentLocation);
+			currentLocation = nextLocation;
+		}
+		
+		// Pick some new ones
+		while ((unorderedSites.size() < numSites) && (remainingRange > 1D)) {
+			Direction direction = new Direction(RandomUtil.getRandomDouble(2D * Math.PI));
+			limit = range / 4D;
+			siteDistance = RandomUtil.getRandomRegressionInteger(confidence, (int)limit);
+			Coordinates newLocation = currentLocation.getNewLocation(direction, siteDistance);
+			unorderedSites.add(newLocation);
+			currentLocation = newLocation;
+			remainingRange -= siteDistance;
 		}
 
 		List<Coordinates> sites = null;
@@ -843,26 +732,7 @@ public class Exploration extends RoverMission
 			double unorderedSitesTotalDistance = getTotalDistance(startingLocation, unorderedSites);
 
 			// Try to reorder sites for shortest distance.
-			List<Coordinates> unorderedSites2 = new ArrayList<Coordinates>(unorderedSites);
-			List<Coordinates> orderedSites = new ArrayList<Coordinates>(unorderedSites2.size());
-			currentLocation = startingLocation;
-			while (unorderedSites2.size() > 0) {
-				Coordinates shortest = unorderedSites2.get(0);
-				double shortestDistance = Coordinates.computeDistance(currentLocation, shortest);
-				Iterator<Coordinates> i = unorderedSites2.iterator();
-				while (i.hasNext()) {
-					Coordinates site = i.next();
-					double distance = Coordinates.computeDistance(currentLocation, site);
-					if (distance < shortestDistance) {
-						shortest = site;
-						shortestDistance = distance;
-					}
-				}
-
-				unorderedSites2.remove(shortest);
-				orderedSites.add(shortest);
-				currentLocation = shortest;
-			}
+			List<Coordinates> orderedSites = getMinimalPath(startingLocation, unorderedSites);
 
 			double orderedSitesTotalDistance = getTotalDistance(startingLocation, orderedSites);
 
@@ -887,7 +757,61 @@ public class Exploration extends RoverMission
 		}
 	}
 
-	private double getTotalDistance(Coordinates startingLoc, List<Coordinates> sites) {
+	/**
+	 * Order a list of Coordinates starting from a point to minimise
+	 * the travel time.
+	 * @param unorderedSites
+	 * @param startingLocation
+	 * @return
+	 */
+	public static List<Coordinates> getMinimalPath(Coordinates startingLocation, List<Coordinates> unorderedSites) {
+		
+		List<Coordinates> unorderedSites2 = new ArrayList<>(unorderedSites);
+		List<Coordinates> orderedSites = new ArrayList<>(unorderedSites2.size());
+		Coordinates currentLocation = startingLocation;
+		while (unorderedSites2.size() > 0) {
+			Coordinates shortest = unorderedSites2.get(0);
+			double shortestDistance = Coordinates.computeDistance(currentLocation, shortest);
+			Iterator<Coordinates> i = unorderedSites2.iterator();
+			while (i.hasNext()) {
+				Coordinates site = i.next();
+				double distance = Coordinates.computeDistance(currentLocation, site);
+				if (distance < shortestDistance) {
+					shortest = site;
+					shortestDistance = distance;
+				}
+			}
+
+			unorderedSites2.remove(shortest);
+			orderedSites.add(shortest);
+			currentLocation = shortest;
+		}
+
+		return orderedSites;
+	}
+
+	/**
+	 * Get a list of explored location for this Settlement that needs further investigation
+	 * @return
+	 */
+	private List<Coordinates> findOutstandingSites(Coordinates startingLoc) {
+		
+		Settlement home = getStartingSettlement();
+		
+		// Get any locations that belong to this home Settlement and need further
+		// exploration before mining
+		List<Coordinates> candiateLocations = surfaceFeatures.getExploredLocations().stream()
+				.filter(e -> e.getNumEstimationImprovement() < Mining.MATURE_ESTIMATE_NUM)
+				.filter(s -> s.getSettlement().equals(home))
+				.map(ExploredLocation::getLocation)
+				.collect(Collectors.toList());
+		if (!candiateLocations.isEmpty()) {
+			return getMinimalPath(startingLoc, candiateLocations);
+		}
+		return Collections.emptyList();
+	}
+
+	private static double getTotalDistance(Coordinates startingLoc, List<Coordinates> sites) {
 		double result = 0D;
 
 		Coordinates currentLoc = startingLoc;
@@ -1020,6 +944,10 @@ public class Exploration extends RoverMission
 	 */
 	@Override
 	public double getTotalSiteScore(Settlement reviewerSettlement) {
+		if (exploredSites.isEmpty()) {
+			return 0D;
+		}
+		
 		int count = 0;
 		double siteValue = 0D;
 		for (ExploredLocation e : exploredSites) {

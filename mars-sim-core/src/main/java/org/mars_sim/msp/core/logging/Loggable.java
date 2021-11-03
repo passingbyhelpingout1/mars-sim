@@ -20,21 +20,24 @@ public interface Loggable {
 	 * What is the settlement of this entity.
 	 */
 	Settlement getAssociatedSettlement();
-
+	
 	/**
 	 * Where is this entity held
+	 * 
 	 * @return
 	 */
 	Unit getContainerUnit();
 
 	/**
 	 * What is the name of the entity to be logged
+	 * 
 	 * @return
 	 */
 	String getNickName();
 
 	/**
 	 * Physical location the surface
+	 * 
 	 * @return
 	 */
 	Coordinates getCoordinates();

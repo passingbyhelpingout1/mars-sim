@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 
-import org.mars_sim.msp.core.Inventory;
 import org.mars_sim.msp.core.UnitManager;
 import org.mars_sim.msp.core.environment.MarsSurface;
 import org.mars_sim.msp.core.logging.SimLogger;
@@ -99,9 +98,6 @@ public abstract class Airlock implements Serializable {
 
 	/** People waiting for the airlock by the outer door. */
     private Set<Integer> awaitingOuterDoor;
-
-	/** The lookup map for occupants. */
-//	private transient Map<Integer, Person> lookupPerson;
 
 	/** The occupant reservation map. */
 	private Map<Integer, Integer> reservationMap;
@@ -914,13 +910,6 @@ public abstract class Airlock implements Serializable {
 	public abstract String getEntityName();
 
 	/**
-	 * Gets the inventory of the entity this airlock is attached to.
-	 * 
-	 * @return inventory
-	 */
-	public abstract Inventory getEntityInventory();
-
-	/**
 	 * Gets the entity this airlock is attached to.
 	 * 
 	 * @return entity.
@@ -928,7 +917,7 @@ public abstract class Airlock implements Serializable {
 	public abstract Object getEntity();
 
 	/**
-	 * Gets the entity this airlock is attached to.
+	 * Gets the locale this airlock is at.
 	 * 
 	 * @return entity.
 	 */
@@ -1004,9 +993,9 @@ public abstract class Airlock implements Serializable {
 	public Set<Integer> getAllInsideOccupants() {
 		if (this instanceof BuildingAirlock)
 			return ((BuildingAirlock)this).getAllInsideOccupants();
-		else if (this instanceof VehicleAirlock)
+		else //if (this instanceof VehicleAirlock)
 			return getOccupants();
-		return new HashSet<>();
+//		return new HashSet<>();
 	}
 
 	/**

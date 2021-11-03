@@ -10,7 +10,6 @@ import java.io.Serializable;
 import java.util.logging.Level;
 
 import org.mars_sim.msp.core.Direction;
-import org.mars_sim.msp.core.Inventory;
 import org.mars_sim.msp.core.LocalAreaUtil;
 import org.mars_sim.msp.core.logging.SimLogger;
 import org.mars_sim.msp.core.structure.Settlement;
@@ -227,8 +226,8 @@ public abstract class GroundVehicle extends Vehicle implements Serializable {
 			double step = 10D;
 			boolean foundGoodLocation = false;
 
-			boolean isSmallVehicle = getVehicleType().equalsIgnoreCase(VehicleType.DELIVERY_DRONE.getName())
-					|| getVehicleType().equalsIgnoreCase(VehicleType.LUV.getName());
+			boolean isSmallVehicle = getVehicleTypeString().equalsIgnoreCase(VehicleType.DELIVERY_DRONE.getName())
+					|| getVehicleTypeString().equalsIgnoreCase(VehicleType.LUV.getName());
 
 			double d = VEHICLE_CLEARANCE_0;
 			if (isSmallVehicle)
@@ -270,13 +269,11 @@ public abstract class GroundVehicle extends Vehicle implements Serializable {
 	 */
 	protected boolean hasEnoughFuel(double fuelConsumed) {
 		Vehicle v = getVehicle();
-	    Inventory vInv = v.getInventory();
         int fuelType = v.getFuelType();
         
     	try {
-    		double remainingFuel = vInv.getAmountResourceStored(fuelType, false);
-//		    	vInv.retrieveAmountResource(fuelType, fuelConsumed);
-    		
+    		double remainingFuel = v.getAmountResourceStored(fuelType);
+	
     		if (remainingFuel < LEAST_AMOUNT) {
     			v.addStatus(StatusType.OUT_OF_FUEL);
     			return false;

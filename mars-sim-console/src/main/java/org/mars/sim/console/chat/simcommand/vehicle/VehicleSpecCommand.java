@@ -28,6 +28,7 @@ import org.mars_sim.msp.core.vehicle.Vehicle;
 public class VehicleSpecCommand extends ChatCommand {
 
 	public static final ChatCommand SPEC = new VehicleSpecCommand();
+	private static final String KM_KG_FORMAT = "%.2f km/kg";
 
 	private VehicleSpecCommand() {
 		super(VehicleChat.VEHICLE_GROUP, "spe", "specs", "What are the vehicle specs.");
@@ -47,10 +48,10 @@ public class VehicleSpecCommand extends ChatCommand {
 
 		StructuredResponse buffer = new StructuredResponse();
 		buffer.appendLabeledString("Name", source.getName());
-		buffer.appendLabeledString("Type", source.getVehicleType());
+		buffer.appendLabeledString("Type", source.getVehicleTypeString());
 		buffer.appendLabeledString("Description", source.getDescription());
 		buffer.appendLabeledString("Base Mass", String.format(CommandHelper.KG_FORMAT, source.getBaseMass()));
-		buffer.appendLabeledString("Base Speed", source.getBaseSpeed() + " km/h");
+		buffer.appendLabeledString("Base Speed", String.format(CommandHelper.KMPH_FORMAT,source.getBaseSpeed()));
 		buffer.appendLabeledString("Drivetrain Efficiency", source.getDrivetrainEfficiency() + " kWh/km");
 
 		// Needs reworking as ResourceType is ID not a class !! 
@@ -62,10 +63,10 @@ public class VehicleSpecCommand extends ChatCommand {
 
 			buffer.appendLabeledString("Power Source", fuel);
 			buffer.appendLabeledString("Fuel Capacity", String.format(CommandHelper.KG_FORMAT, source.getFuelCapacity()));
-			buffer.appendLabeledString("Base Range",
-								Math.round(source.getBaseRange() * 100.0) / 100.0 + " km (Estimated)");
-			buffer.appendLabeledString("Base Fuel Consumption", 
-								Math.round(source.getBaseFuelEconomy() * 100.0) / 100.0 + " km/kg (Estimated)");
+			buffer.appendLabeledString("Base Range Est.", String.format(CommandHelper.KM_FORMAT, source.getBaseRange()));
+			buffer.appendLabeledString("Base Fuel Economy", String.format(KM_KG_FORMAT, source.getBaseFuelEconomy()));
+			buffer.appendLabeledString("Est. Average Economy", String.format(KM_KG_FORMAT, source.getEstimatedAveFuelEconomy()));
+			buffer.appendLabeledString("Actual Economy", String.format(KM_KG_FORMAT, source.getIFuelEconomy()));
 		}
 		else {
 			buffer.appendLabeledString("Power Source", fuel);

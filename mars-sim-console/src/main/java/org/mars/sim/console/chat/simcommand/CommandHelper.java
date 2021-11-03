@@ -22,6 +22,7 @@ import org.mars_sim.msp.core.malfunction.MalfunctionRepairWork;
 import org.mars_sim.msp.core.person.Person;
 import org.mars_sim.msp.core.person.ai.mission.Mission;
 import org.mars_sim.msp.core.person.ai.mission.MissionMember;
+import org.mars_sim.msp.core.person.ai.mission.MissionPhase;
 import org.mars_sim.msp.core.person.ai.mission.MissionPlanning;
 import org.mars_sim.msp.core.person.ai.mission.NavPoint;
 import org.mars_sim.msp.core.person.ai.mission.PlanType;
@@ -53,10 +54,13 @@ public class CommandHelper {
 	public static final int TASK_WIDTH = 30;
 	// Width of a Bot name
 	public static final int BOT_WIDTH = 19;
+	
+	// Base value formats for use with String.format
 	public static final String KG_FORMAT = "%.2f kg";
 	public static final String KM_FORMAT = "%.2f km";
 	public static final String PERC_FORMAT = "%.1f%%";
 	public static final String MILLISOL_FORMAT = "%.1f millisol";
+	public static final String KMPH_FORMAT = "%.2f km/h";
 	
 	private CommandHelper() {
 		// Do nothing
@@ -113,8 +117,8 @@ public class CommandHelper {
 			Set<Person> c = study.getCollaborativeResearchers();
 			for (Person person :  study.getInvitedResearchers()) {
 				response.appendTableRow(person.getName(),
-										(study.hasInvitedResearcherResponded(person) ? "Yes" : "No"),
-										(c.contains(person) ? "Yes" : "No"));
+										study.hasInvitedResearcherResponded(person),
+										c.contains(person));
 			}
 			break;
 		
@@ -189,11 +193,35 @@ public class CommandHelper {
 		
 		for (Airlock airlock : airlocks) {
 			response.appendTableRow(airlock.getEntityName(), airlock.getState().name(),
-									(airlock.isActivated() ? "Yes" : "No"),
+									airlock.isActivated(),
 									airlock.getOperatorName(),
 									String.format("%d/%d", airlock.getNumOccupants(), airlock.getCapacity()),
 									(airlock.isInnerDoorLocked() ? "LCK" : "ULK"),
 									(airlock.isOuterDoorLocked() ? "LCK" : "ULK"));
+		}
+	}
+	
+	/**
+	 * Display the details of a list of Airlocks
+	 * @param response Output for details.
+	 * @param airlocks
+	 */
+	public static void outputAirlockDetailed(StructuredResponse response, String name, Airlock airlock) {
+		response.appendLabeledString("Name", name);
+		response.appendLabeledString("Operator", airlock.getOperatorName());
+		response.appendLabeledString("State", airlock.getState().name());
+		response.appendLabeledString("Activated", (airlock.isActivated() ? "Yes" : "No"));
+		response.appendLabeledString("Doors", "Inner-" + (airlock.isInnerDoorLocked() ? "LCK" : "ULK")
+												+ " Outer-" + (airlock.isOuterDoorLocked() ? "LCK" : "ULK"));
+		response.appendLabeledString("Waiting", "Inner-" + airlock.getNumAwaitingInnerDoor()
+												+ " Outer-" + airlock.getNumAwaitingOuterDoor());
+		
+		response.appendTableHeading("Occupant", PERSON_WIDTH, "Has Suit");
+		for (int pID : airlock.getOccupants()) {
+			Person p = airlock.getPersonByID(pID);
+			if (p != null) {
+				response.appendTableRow(p.getName(), p.getSuit() != null ? "Yes" : "No");
+			}
 		}
 	}
 	
@@ -220,29 +248,36 @@ public class CommandHelper {
 	
 		if (v != null) {
 			response.appendLabeledString("Vehicle", v.getName());
-			response.appendLabeledString("Type", v.getVehicleType());
+			response.appendLabeledString("Type", v.getVehicleTypeString());
 			response.appendLabeledString("Est. Dist.", String.format(KM_FORMAT, dist));
 			response.appendLabeledString("Travelled", String.format(KM_FORMAT, trav));
 		}
 		response.appendLabeledString("Phase", mission.getPhaseDescription());
 		MissionPlanning mp = mission.getPlan();
-		if (mp != null) {
+		if ((mp != null) && (mp.getStatus() == PlanType.PENDING)) {
 			StringBuilder planMsg = new StringBuilder();
 			PlanType st = mp.getStatus();
 			planMsg.append(st.getName());
-			switch (st) {
-			case PENDING:
-				planMsg.append(' ');
-				planMsg.append(String.format(PERC_FORMAT, mp.getPercentComplete()));
-				break;
-			case APPROVED:
-			case NOT_APPROVED:
-				planMsg.append(" - Score ");
-				planMsg.append(String.format("%.1f out of %.1f", mp.getScore(), mp.getPassingScore()));
-				break;
-			}
+			planMsg.append(' ');
+			planMsg.append(String.format(PERC_FORMAT, mp.getPercentComplete()));
+
 			response.appendLabeledString("Plan Status", planMsg.toString());
 		}
+		
+		// Most significant date
+		MissionPhase phase = mission.getPhase();
+		if (phase.equals(VehicleMission.REVIEWING)
+				|| phase.equals(VehicleMission.EMBARKING)) {
+			response.appendLabeledString("Date Filed", mission.getDateFiled());
+		}
+		else if (phase.equals(VehicleMission.COMPLETED)
+				|| phase.equals(VehicleMission.INCOMPLETED)) {
+			response.appendLabeledString("Date Returned", mission.getDateReturned());
+		}
+		else {
+			response.appendLabeledString("Date Embarked", mission.getDateEmbarked());
+		}
+		
 		response.appendLabeledString("Lead", startingPerson.getName());
 
 		List<String> names = plist.stream().map(p -> p.getName()).sorted().collect(Collectors.toList());

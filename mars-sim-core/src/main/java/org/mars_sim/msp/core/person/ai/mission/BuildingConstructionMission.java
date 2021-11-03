@@ -1,7 +1,7 @@
 /*
  * Mars Simulation Project
  * BuildingConstructionMission.java
- * @Date 2021-09-20
+ * @date 2021-10-20
  * @author Scott Davis
  */
 package org.mars_sim.msp.core.person.ai.mission;
@@ -19,7 +19,6 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.mars_sim.msp.core.Inventory;
 import org.mars_sim.msp.core.LocalAreaUtil;
 import org.mars_sim.msp.core.Msg;
 import org.mars_sim.msp.core.Simulation;
@@ -44,7 +43,6 @@ import org.mars_sim.msp.core.structure.construction.ConstructionManager;
 import org.mars_sim.msp.core.structure.construction.ConstructionSite;
 import org.mars_sim.msp.core.structure.construction.ConstructionStage;
 import org.mars_sim.msp.core.structure.construction.ConstructionStageInfo;
-import org.mars_sim.msp.core.structure.construction.ConstructionUtil;
 import org.mars_sim.msp.core.structure.construction.ConstructionValues;
 import org.mars_sim.msp.core.structure.construction.ConstructionVehicleType;
 import org.mars_sim.msp.core.time.MarsClock;
@@ -522,11 +520,10 @@ public class BuildingConstructionMission extends Mission implements Serializable
 		while (j.hasNext()) {
 			GroundVehicle vehicle = j.next();
 			vehicle.setReservedForMission(true);
-			if (settlement.getInventory().containsUnit(vehicle)) {
-				settlement.getInventory().retrieveUnit(vehicle);
-			} else {
-				logger.warning("Unable to retrieve " + vehicle.getName() + " cannot be retrieved from "
-						+ settlement.getName() + " inventory.");
+			if (!settlement.removeParkedVehicle(vehicle)) {
+				logger.warning("Unable to retrieve " + vehicle.getName() 
+					+ " cannot be retrieved from "
+					+ settlement.getName() + " inventory.");
 				addMissionStatus(MissionStatus.CONSTRUCTION_VEHICLE_NOT_RETRIEVED);
 				endMission();
 			}
@@ -606,9 +603,9 @@ public class BuildingConstructionMission extends Mission implements Serializable
 				while (l.hasNext()) {
 					Integer part = l.next();
 					try {
-						settlement.getInventory().retrieveItemResources(part, 1);
+						settlement.retrieveItemResource(part, 1);
 						if (vehicle != null) {
-							vehicle.getInventory().storeItemResources(part, 1);
+							vehicle.storeItemResource(part, 1);
 						}
 						luvAttachmentParts.add(part);
 					} catch (Exception e) {
@@ -757,28 +754,25 @@ public class BuildingConstructionMission extends Mission implements Serializable
 	 * at settlement inventory.
 	 */
 	private void loadAvailableConstructionMaterials() {
-		// System.out.println("starting loadAvailableConstructionMaterials()");
-		Inventory inv = settlement.getInventory();
-
 		// Load amount resources.
 		Iterator<Integer> i = stage.getRemainingResources().keySet().iterator();
 		while (i.hasNext()) {
 			Integer resource = i.next();
 			double amountNeeded = stage.getRemainingResources().get(resource);
 			// Add tracking demand
-			inv.addAmountDemandTotalRequest(resource, amountNeeded);
+//			inv.addAmountDemandTotalRequest(resource, amountNeeded);
 
-			double amountAvailable = inv.getAmountResourceStored(resource, false);
+			double amountAvailable = settlement.getAmountResourceStored(resource);
 
 			// Load as much of the remaining resource as possible into the construction site
 			// stage.
 			double amountLoading = Math.min(amountAvailable, amountNeeded);
 
 			if (amountLoading > SMALL_AMOUNT) {
-				inv.retrieveAmountResource(resource, amountLoading);
+				settlement.retrieveAmountResource(resource, amountLoading);
 				stage.addResource(resource, amountLoading);
 				// Add tracking demand
-				inv.addAmountDemand(resource, amountLoading);
+//				inv.addAmountDemand(resource, amountLoading);
 			}
 		}
 
@@ -787,17 +781,17 @@ public class BuildingConstructionMission extends Mission implements Serializable
 		while (j.hasNext()) {
 			Integer part = j.next();
 			int numberNeeded = stage.getRemainingParts().get(part);
-			int numberAvailable = inv.getItemResourceNum(part);
+			int numberAvailable = settlement.getItemResourceStored(part);
 			// Add demand tracking
-			inv.addItemDemandTotalRequest(part, numberNeeded);
+//			inv.addItemDemandTotalRequest(part, numberNeeded);
 			
 			// Load as many remaining parts as possible into the construction site stage.
 			int numberLoading = Math.min(numberAvailable, numberNeeded);
 
 			if (numberLoading > 0) {
-				inv.retrieveItemResources(part, numberLoading);
+				settlement.retrieveItemResource(part, numberLoading);
 				// Add tracking demand
-				inv.addItemDemand(part, numberLoading);
+//				inv.addItemDemand(part, numberLoading);
 				
 				stage.addParts(part, numberLoading);
 			}
@@ -950,9 +944,7 @@ public class BuildingConstructionMission extends Mission implements Serializable
 					luvTemp.setParkedLocation(settlementLocSite.getX(), settlementLocSite.getY(),
 							RandomUtil.getRandomDouble(360D));
 
-					if (settlement.getInventory().containsUnit(luvTemp)) {
-						settlement.getInventory().retrieveUnit(luvTemp);
-					} else {
+					if (!settlement.removeParkedVehicle(luvTemp)) {
 						logger.severe("Unable to retrieve " + luvTemp.getName() + " cannot be retrieved from "
 								+ settlement.getName() + " inventory.");
 						addMissionStatus(MissionStatus.CONSTRUCTION_VEHICLE_NOT_RETRIEVED);
@@ -965,36 +957,6 @@ public class BuildingConstructionMission extends Mission implements Serializable
 		return result;
 	}
 
-	/**
-	 * Unreserves all construction vehicles used in mission.
-	 */
-	private void unreserveConstructionVehicles() {
-		if (constructionVehicles != null) {
-			Iterator<GroundVehicle> i = constructionVehicles.iterator();
-			while (i.hasNext()) {
-				GroundVehicle vehicle = i.next();
-				vehicle.setReservedForMission(false);
-
-				Inventory vInv = vehicle.getInventory();
-				Inventory sInv = settlement.getInventory();
-
-				// Store construction vehicle in settlement.
-				if (sInv.canStoreUnit(vehicle, false)) {
-					sInv.storeUnit(vehicle);
-				}
-				vehicle.findNewParkingLoc();
-
-				// Store all construction vehicle attachments in settlement.
-				Iterator<Integer> j = vInv.getAllItemResourcesStored().iterator();
-				while (j.hasNext()) {
-					Integer attachmentPart = j.next();
-					int num = vInv.getItemResourceNum(attachmentPart);
-					vInv.retrieveItemResources(attachmentPart, num);
-					sInv.storeItemResources(attachmentPart, num);
-				}
-			}
-		}
-	}
 
 	/*
 	 * Unreserve and store back all LUV attachment parts in settlement.
@@ -1006,7 +968,7 @@ public class BuildingConstructionMission extends Mission implements Serializable
 			while (i.hasNext()) {
 				Integer part = i.next();
 				try {
-					settlement.getInventory().storeItemResources(part, 1);
+					settlement.storeItemResource(part, 1);
 				} catch (Exception e) {
 					logger.log(Level.SEVERE,
 							"Error storing attachment part " + ItemResourceUtil.findItemResource(part).getName());
@@ -1513,34 +1475,6 @@ public class BuildingConstructionMission extends Mission implements Serializable
 
 			Point2D position = LocalAreaUtil.getLocalRelativeLocation(xPos, yPos, building);
 			result.add(position);
-		}
-
-		return result;
-	}
-
-	/**
-	 * Determines the preferred construction building type for a given foundation.
-	 * 
-	 * @param foundationStageInfo the foundation stage info.
-	 * @param constructionSkill   the mission starter's construction skill.
-	 * @return preferred building type or null if none found.
-	 */
-	private String determinePreferredConstructedBuildingType(ConstructionStageInfo foundationStageInfo,
-			int constructionSkill) {
-
-		String result = null;
-
-		ConstructionValues values = settlement.getConstructionManager().getConstructionValues();
-		List<String> constructableBuildings = ConstructionUtil.getConstructableBuildingNames(foundationStageInfo);
-		Iterator<String> i = constructableBuildings.iterator();
-		double maxBuildingValue = Double.NEGATIVE_INFINITY;
-		while (i.hasNext()) {
-			String buildingType = i.next();
-			double buildingValue = values.getConstructionStageValue(foundationStageInfo, constructionSkill);
-			if (buildingValue > maxBuildingValue) {
-				maxBuildingValue = buildingValue;
-				result = buildingType;
-			}
 		}
 
 		return result;

@@ -9,7 +9,8 @@ package org.mars.sim.console.chat.simcommand.unit;
 
 import org.mars.sim.console.chat.Conversation;
 import org.mars_sim.msp.core.Unit;
-import org.mars_sim.msp.core.location.LocationTag;
+import org.mars_sim.msp.core.structure.Settlement;
+import org.mars_sim.msp.core.structure.building.Building;
 
 /**
  * Command to stop speaking with an entity.
@@ -27,9 +28,29 @@ public class UnitLocationCommand extends AbstractUnitCommand {
 	 */
 	@Override
 	protected boolean execute(Conversation context, String input, Unit source) {
-		
-		LocationTag target = source.getLocationTag();
-		context.println(target.getExtendedLocation());
+		var message = new StringBuilder();
+		if (source.isOutside()) {
+			message.append("On the surface @ ")
+				   .append(source.getCoordinates().getFormattedString());
+		}
+		else if (source.isInVehicle()) {
+			message.append("In ").append(source.getVehicle().getName());
+			if (source.isInSettlement()) {
+				message.append(", warning also isIsSettlement=true");
+			}
+		}
+		else {
+			Settlement base = source.getSettlement();
+			Building building = source.getBuildingLocation();
+			message.append("In ");
+			if (building != null) {
+				message.append(building.getNickName()).append(" @ ");
+			}
+
+			message.append(base.getName());				
+		}
+
+		context.println(message.toString());
 		return true;
 	}
 

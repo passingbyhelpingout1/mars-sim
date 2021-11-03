@@ -1,7 +1,7 @@
-/**
+/*
  * Mars Simulation Project
  * ExplorationMeta.java
- * @version 3.2.0 2021-06-20
+ * @date 2021-10-20
  * @author Scott Davis
  */
 package org.mars_sim.msp.core.person.ai.mission.meta;
@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.mars_sim.msp.core.equipment.EquipmentType;
 import org.mars_sim.msp.core.person.Person;
 import org.mars_sim.msp.core.person.ai.job.JobType;
 import org.mars_sim.msp.core.person.ai.mission.Exploration;
@@ -67,15 +68,14 @@ public class ExplorationMeta extends AbstractMetaMission {
 				
 				// 1. Check if there are enough specimen containers at the settlement for
 				// collecting rock samples.
-				if (settlement.getInventory().findNumSpecimenBoxes(true, true) < Exploration.REQUIRED_SPECIMEN_CONTAINERS) {
+				if (settlement.findNumContainersOfType(EquipmentType.BAG) < Exploration.REQUIRED_SPECIMEN_CONTAINERS) {
 					return 0;
 				}
 				
-				if (settlement.getMissionBaseProbability(MissionType.EXPLORATION))
-	            	missionProbability = 1;
-	            else
+				if (!settlement.getMissionBaseProbability(MissionType.EXPLORATION)) {
 	    			return 0;
-		   		
+				}
+				
 				int numEmbarked = VehicleMission.numEmbarkingMissions(settlement);
 				int numThisMission = missionManager.numParticularMissions(MissionType.EXPLORATION, settlement);
 				
@@ -84,8 +84,9 @@ public class ExplorationMeta extends AbstractMetaMission {
 	    			return 0;
 	    		}	
 	    		
-	    		if (numThisMission > 1)
+	    		if (numThisMission > 1) {
 	    			return 0;	
+	    		}
 	    		
 	    		missionProbability = 0;
 	
@@ -95,8 +96,9 @@ public class ExplorationMeta extends AbstractMetaMission {
 					if (rover != null) {
 						// Check if any mineral locations within rover range and obtain their concentration
 						missionProbability = Math.min(MAX, settlement.getTotalMineralValue(rover)) / VALUE;
-						if (missionProbability < 0)
+						if (missionProbability < 0) {
 							missionProbability = 0;
+						}
 					}
 					
 				} catch (Exception e) {
@@ -107,7 +109,7 @@ public class ExplorationMeta extends AbstractMetaMission {
 				int f1 = numEmbarked + 1;
 				int f2 = 2*numThisMission + 1;
 				
-				missionProbability *= settlement.getNumCitizens() / f1 / f2 * ( 1 + settlement.getMissionDirectiveModifier(MissionType.EXPLORATION));
+				missionProbability *= (double)settlement.getNumCitizens() / f1 / f2 * ( 1 + settlement.getMissionDirectiveModifier(MissionType.EXPLORATION));
 				
 				// Job modifier.
 				missionProbability *= getLeaderSuitability(person)
