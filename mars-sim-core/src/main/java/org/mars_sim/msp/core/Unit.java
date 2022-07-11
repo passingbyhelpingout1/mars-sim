@@ -20,6 +20,7 @@ import org.mars_sim.msp.core.environment.SurfaceFeatures;
 import org.mars_sim.msp.core.environment.TerrainElevation;
 import org.mars_sim.msp.core.environment.Weather;
 import org.mars_sim.msp.core.equipment.Equipment;
+import org.mars_sim.msp.core.events.EventDispatcher;
 import org.mars_sim.msp.core.location.LocationStateType;
 import org.mars_sim.msp.core.location.LocationTag;
 import org.mars_sim.msp.core.logging.Loggable;
@@ -79,7 +80,8 @@ public abstract class Unit implements Serializable, Loggable, UnitIdentifer, Com
 	protected LocationStateType currentStateType;
 
 	/** Unit listeners. */
-	private transient List<UnitListener> listeners;// = Collections.synchronizedList(new ArrayList<UnitListener>());
+	private transient List<UnitListener> listeners;
+	private static EventDispatcher eventManager = EventDispatcher.getInstance();
 
 	protected static Simulation sim = Simulation.instance();
 	protected static SimulationConfig simulationConfig = SimulationConfig.instance();
@@ -599,18 +601,10 @@ public abstract class Unit implements Serializable, Loggable, UnitIdentifer, Com
 	 * @param target     the event target object or null if none.
 	 */
 	public final void fireUnitUpdate(UnitEventType updateType, Object target) {
-		if (listeners == null || listeners.size() < 1) {
-			// listeners = Collections.synchronizedList(new ArrayList<UnitListener>());
-			// we don't do anything if there's no listeners attached
+		if (listeners == null || listeners.isEmpty()) {
 			return;
 		}
-		final UnitEvent ue = new UnitEvent(this, updateType, target);
-		synchronized (listeners) {
-			Iterator<UnitListener> i = listeners.iterator();
-			while (i.hasNext()) {
-				i.next().unitUpdate(ue);
-			}
-		}
+		eventManager.addEvent(new UnitEventInstance(this, updateType, target, listeners));
 	}
 
 	public LocationStateType getLocationStateType() {

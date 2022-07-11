@@ -6,56 +6,26 @@
  */
 package org.mars_sim.msp.core;
 
-import java.util.EventObject;
-
 /**
  * A unit change event.
  */
-public class UnitEvent
-extends EventObject {
+public interface UnitEvent {
 
-	/** default serial id. */
-	private static final long serialVersionUID = 1L;
-
-	// Data members
-	/** The event type. */
-	private final UnitEventType type;
-	/** The event target object, if any. */
-	private final Object target;
-
-	/**
-	 * Constructor.
-	 * @param source the object throwing the event.
-	 * @param type the type of event.
-	 */
-	public UnitEvent(Unit source, UnitEventType type, Object target) {
-		// Use EventObject constructor
-		super(source);
-		this.type = type;
-		this.target = target;
-	}
 
 	/**
 	 * Gets the type of event.
 	 * @return event type
 	 */
-	public UnitEventType getType() {
-		return type;
-	}
+	UnitEventType getType();
 
 	/**
 	 * Gets the target object of the event.
 	 * @return target object or null if none.
 	 */
-	public Object getTarget() {
-		return target;
-	}
+	Object getTarget();
 
 	/**
-	 * Override {@link Object#toString()} method.
+	 * Get the Unit source of the event.
 	 */
-	@Override
-	public String toString() {
-		return type.getName();
-	}
+	Unit getSource();
 }
