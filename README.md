@@ -142,9 +142,8 @@ That's because living on Mars does require a functioning Martian calendar in whi
 of days (or sols) that have elapsed. At the same time, astronomers would prefer to come up with a calendar that 
 is handy and intuitive in predicting the orbit of Mars around the sun. 
 
-The difficulties arises when each sol on Mars has slightly more than 24 earth hours and there are 669 earth days 
-on one Martian orbit (or year). Therefore, it is not a straight-foward exercise in converting the time and day 
-between Mars and Earth by merely a simple equation.
+The difficulty arises when each sol on Mars has slightly more than 24 Earth hours and there are 669 Earth days in one Martian orbit (or year). Therefore, it is not a straightforward exercise to convert the time and day between Mars and Earth with a simple equation.
+
 
 > [!NOTE]
 > See [Timekeeping](https://github.com/mars-sim/mars-sim/wiki/Timekeeping) for further discussions on 
